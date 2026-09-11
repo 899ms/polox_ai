@@ -13,6 +13,7 @@ import { canvasMediaNavigationKey } from '~/composables/useCanvasMediaNavigation
 
 const canvas = ref<{
   focusMedia: (url: string) => Promise<boolean>
+  hideAsset: (id: string) => Promise<void>
 } | null>(null)
 provide(canvasMediaNavigationKey, async (url) => {
   if (!await canvas.value?.focusMedia(url))
@@ -28,7 +29,7 @@ const { projects, selectedProjectId, loadProjects } = useProjects()
 const route = useRoute()
 const nuxtApp = useNuxtApp()
 const projectId = computed(() => String(route.params.id || ''))
-const { sessionId: agentSessionId, messages, images, status, waitingForUserConfirm, waitingForUserChoice, pending: agentPending, draft, attachments, attaching, error: agentError, sendMessage, stopAgent, stopping, attachFiles, attachUrls, removeAttachment, resolveConfirmation, resolveChoice, qualityPreference, confirmPolicy, agents, activeAgentId, canCreateAgent, canSwitchAgent, createAgent, selectAgent, queueNotice, applyCanvasJobs } = useAgentLab({
+const { sessionId: agentSessionId, messages, images, allImages, status, waitingForUserConfirm, waitingForUserChoice, pending: agentPending, draft, attachments, attaching, error: agentError, sendMessage, stopAgent, stopping, attachFiles, attachUrls, removeAttachment, resolveConfirmation, resolveChoice, qualityPreference, confirmPolicy, agents, activeAgentId, canCreateAgent, canSwitchAgent, createAgent, selectAgent, queueNotice, applyCanvasJobs } = useAgentLab({
   projectId,
   onJobs(jobs) {
     for (const job of jobs)
@@ -175,8 +176,8 @@ async function confirmBulk(targetProjectId?: string) {
     try {
       if (action === 'move')
         await $fetch(`/api/ai/jobs/${taskId}`, { method: 'PATCH', body: { projectId: targetProjectId } })
-      else
-        await $fetch(`/api/ai/jobs/${taskId}`, { method: 'DELETE' })
+      else if (!await deleteCanvasResult(taskId))
+        continue
       removeAgentResult(taskId)
       items.value = items.value.filter(job => job.taskId !== taskId)
       total.value = Math.max(0, total.value - 1)
@@ -195,6 +196,19 @@ async function confirmBulk(targetProjectId?: string) {
   if (refreshed.some(result => result.status === 'rejected'))
     toast.error('Could not refresh the project. Reload to see the latest results.')
 }
+async function deleteCanvasResult(id: string) {
+  const isLocalAsset = !items.value.some(job => job.taskId === id)
+    && allImages.value.some(image => `${`agent_${image.id}`.slice(0, 120)}:0` === id)
+  if (isLocalAsset) {
+    if (!canvas.value)
+      throw new Error('Canvas is still loading. Please try again.')
+    await canvas.value.hideAsset(id)
+    return false
+  }
+  await $fetch(`/api/ai/jobs/${id}`, { method: 'DELETE' })
+  return true
+}
+
 function requestDelete(taskId: string) {
   const job = items.value.find(item => item.taskId === taskId)
   if (job && isGenerationActive(job.state))
@@ -244,7 +258,12 @@ async function confirmDelete() {
     return
   deletingTaskId.value = taskId
   try {
-    await $fetch(`/api/ai/jobs/${taskId}`, { method: 'DELETE' })
+    const deletedJob = await deleteCanvasResult(taskId)
+    if (!deletedJob) {
+      deleteConfirmOpen.value = false
+      pendingDeleteTaskId.value = ''
+      return
+    }
     removeAgentResult(taskId)
     items.value = items.value.filter(job => job.taskId !== taskId)
     total.value = Math.max(0, total.value - 1)
@@ -499,7 +518,7 @@ function onAttachCanvas(payload: {
             :key="projectId"
             :project-id="projectId"
             :jobs="items"
-            :images="images"
+            :images="allImages"
             :loading="loading"
             :deleting-task-id="deletingTaskId"
             :show-move="otherProjects.length > 0"

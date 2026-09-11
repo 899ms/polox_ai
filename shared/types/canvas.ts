@@ -1,9 +1,10 @@
 import { z } from 'zod'
 
 export const CANVAS_BATCH_SIZE = 100
-export const canvasAssetIdSchema = z.string().min(1).max(200).regex(/^[a-z0-9_.:-]+$/i).refine(value => value !== '__viewport__')
+export const canvasAssetIdSchema = z.string().min(1).max(200).regex(/^[\w.:-]+$/).refine(value => value !== '__viewport__')
 const coordinate = z.number().finite().min(-1e7).max(1e7)
 export const canvasRectSchema = z.object({
+  hidden: z.boolean().optional(),
   x: coordinate,
   y: coordinate,
   width: z.number().finite().min(200).max(1600),

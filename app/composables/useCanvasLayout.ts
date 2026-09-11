@@ -158,6 +158,22 @@ export function useCanvasLayout(projectId: string) {
     finally { loading = undefined }
   }
   function leaving() { void flush(true) }
+  async function hideNode(id: string) {
+    const rect = positions.value.get(id)
+    if (!ready.value || !rect)
+      throw new Error('Canvas is still loading. Please try again.')
+    positions.value = new Map(positions.value).set(id, { ...rect, hidden: true })
+    markNode(id)
+    await flush()
+    // A save already in flight may have finished before this change was queued.
+    if (dirty.has(id))
+      await flush()
+    if (dirty.has(id)) {
+      positions.value = new Map(positions.value).set(id, rect)
+      markNode(id)
+      throw new Error('Could not delete this asset. Please try again.')
+    }
+  }
   onMounted(() => window.addEventListener('pagehide', leaving))
   onBeforeUnmount(() => {
     disposed = true
@@ -165,5 +181,5 @@ export function useCanvasLayout(projectId: string) {
     window.removeEventListener('pagehide', leaving)
     leaving()
   })
-  return { positions, camera, nextSlot, ready, loadError, saveState, markNode, markView, ensure, flush }
+  return { positions, camera, nextSlot, ready, loadError, saveState, markNode, markView, ensure, flush, hideNode }
 }

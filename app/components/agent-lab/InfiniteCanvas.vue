@@ -40,10 +40,13 @@ interface Asset {
   error: string
   job?: GenerationJobPublic
 }
+const { positions, camera, nextSlot, ready, loadError, markNode, markView, ensure, flush, hideNode } = useCanvasLayout(props.projectId)
 const sourceAssets = computed(() => {
   const result: Asset[] = []
   const urls = new Set<string>()
   const taskIds = new Set<string>()
+  const seenImageIds = new Set<string>()
+  const seenImageUrls = new Set<string>()
   for (const job of props.jobs) {
     taskIds.add(job.taskId)
     for (const [index, url] of (job.resultUrls.length ? job.resultUrls : ['']).entries()) {
@@ -55,9 +58,23 @@ const sourceAssets = computed(() => {
       result.push({ id: `${job.taskId}:${index}`, taskId: job.taskId, createdAt: job.createdAt, completedAt: job.completedAt, job, url, name: layerResult ? layerName : assetName({ id: `${job.taskId}:${index}`, prompt: job.prompt, name: String(job.input.asset_name || matchingAgentAsset(props.images, job.taskId, url)?.name || ''), kind: job.category === 'Video' ? 'video' : 'still', videoMode: String(job.input.videoMode || '') }), prompt, video: job.category === 'Video' || isMediaVideoUrl(url), cutout: /remove.?background|cutout/i.test(job.task), state: job.state, error: job.failMsg })
     }
   }
+  for (const url of urls)
+    seenImageUrls.add(url)
   for (const item of props.images) {
     const persistedId = `agent_${item.id}`.slice(0, 120)
-    if ((item.url && urls.has(item.url)) || taskIds.has(persistedId) || taskIds.has(item.providerTaskId || item.id))
+    if (positions.value.get(`${persistedId}:0`)?.hidden)
+      continue
+    // Canvas media is project-scoped: dedupe by asset id and by url so the
+    // same uploaded/reference image never renders twice across agents.
+    if (seenImageIds.has(persistedId))
+      continue
+    seenImageIds.add(persistedId)
+    if (item.url) {
+      if (seenImageUrls.has(item.url))
+        continue
+      seenImageUrls.add(item.url)
+    }
+    if (taskIds.has(persistedId) || taskIds.has(item.providerTaskId || item.id))
       continue
     result.push({ id: `${persistedId}:0`, url: item.url, name: assetName(item), prompt: item.prompt, video: item.kind === 'video', cutout: item.kind === 'cutout', state: item.status, error: item.error })
   }
@@ -67,12 +84,12 @@ const assets = computed(() => byCanvasOrder(sourceAssets.value))
 const latestAsset = computed(() => latestCanvasAsset(sourceAssets.value))
 const surface = ref<HTMLElement>()
 const { width, height } = useElementSize(surface)
-const { positions, camera, nextSlot, ready, loadError, markNode, markView, ensure, flush } = useCanvasLayout(props.projectId)
 const selected = ref('')
 const selection = ref(new Set<string>())
 const selectedAssets = computed(() => assets.value.filter(asset => selection.value.has(asset.id)))
 const batchIds = computed(() => [...new Set(selectedAssets.value.flatMap(asset => asset.taskId ? [asset.taskId] : []))])
-const canBatchDelete = computed(() => selectedAssets.value.every(asset => asset.taskId && ['success', 'fail'].includes(asset.state)))
+const deleteIds = computed(() => [...new Set(selectedAssets.value.map(asset => asset.taskId || asset.id))])
+const canBatchDelete = computed(() => selectedAssets.value.every(asset => ['success', 'fail'].includes(asset.state)))
 const exporting = ref(false)
 const exportError = ref('')
 const canExportSelection = computed(() => selectedAssets.value.length > 0 && selectedAssets.value.length <= 100 && selectedAssets.value.every(asset => asset.url && asset.state === 'success'))
@@ -276,7 +293,7 @@ async function focusMedia(url: string) {
   focusAsset(asset.id)
   return true
 }
-defineExpose({ focusMedia })
+defineExpose({ focusMedia, hideAsset: hideNode })
 onMounted(async () => {
   observerReady = true
   await loadLayout()
@@ -700,7 +717,7 @@ onBeforeUnmount(() => {
           <button v-if="showMove && asset.taskId" class="canvas-action" aria-label="Move to project" @click="emit('move', asset.taskId)">
             <Icon name="i-lucide-folder" />
           </button>
-          <button v-if="asset.taskId && ['success', 'fail'].includes(asset.state)" class="canvas-action" aria-label="Delete result" :disabled="deletingTaskId === asset.taskId" @click="emit('delete', asset.taskId)">
+          <button v-if="['success', 'fail'].includes(asset.state)" class="canvas-action" aria-label="Delete result" :disabled="deletingTaskId === (asset.taskId || asset.id)" @click="emit('delete', asset.taskId || asset.id)">
             <Icon name="i-lucide-trash-2" />
           </button>
         </div>
@@ -715,7 +732,7 @@ onBeforeUnmount(() => {
       <button class="canvas-action" aria-label="Move selected to project" :disabled="!showMove || batchIds.length === 0 || selectedAssets.some(asset => !asset.taskId)" @click="emit('moveMany', batchIds)">
         <Icon name="i-lucide-folder" />
       </button>
-      <button class="canvas-action" aria-label="Delete selected results" :disabled="!canBatchDelete" @click="emit('deleteMany', batchIds)">
+      <button class="canvas-action" aria-label="Delete selected results" :disabled="!canBatchDelete" @click="emit('deleteMany', deleteIds)">
         <Icon name="i-lucide-trash-2" />
       </button>
     </div>

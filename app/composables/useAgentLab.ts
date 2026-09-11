@@ -454,6 +454,24 @@ function createAgentLab(options?: {
       : Boolean(agent.busy || agent.pending || (agent.status && agent.status !== 'idle'))
     return { id: agent.id, title, busy }
   }))
+  // The canvas is project-scoped: it must show every agent's media, not just
+  // the active agent's. Otherwise creating a new agent (which resets the live
+  // images list) would wipe earlier agents' uploads/references from the canvas
+  // until a reload restores the stored agents.
+  const allImages = computed<AgentImage[]>(() => {
+    const byId = new Map<string, AgentImage>()
+    for (const agent of storedAgents.value) {
+      for (const image of agent.images || []) {
+        if (!byId.has(image.id))
+          byId.set(image.id, image)
+      }
+    }
+    for (const image of images.value) {
+      if (image.url)
+        byId.set(image.id, image)
+    }
+    return [...byId.values()]
+  })
   function bumpStream() {
     streamEpoch += 1
     return streamEpoch
@@ -2786,6 +2804,7 @@ function createAgentLab(options?: {
     busy,
     queueNotice,
     agents,
+    allImages,
     activeAgentId,
     canCreateAgent,
     canSwitchAgent,

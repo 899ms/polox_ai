@@ -3,6 +3,7 @@ import { defineCollection } from '../utils/sqlite'
 interface CanvasLayoutDocument {
   projectId: string
   assetId: string
+  hidden?: boolean
   x: number
   y: number
   width: number

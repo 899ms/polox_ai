@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
   if (!parsed.success)
     throw createError({ statusCode: 400, statusMessage: 'Invalid canvas layout' })
   const { nodes, camera, nextSlot, version } = parsed.data
-  const changes: Array<{ assetId: string, values: Record<string, number> }> = nodes.map(({ id, ...rect }) => ({ assetId: id, values: rect }))
+  const changes: Array<{ assetId: string, values: Record<string, number | boolean> }> = nodes.map(({ id, ...rect }) => ({ assetId: id, values: rect }))
   if (camera)
     changes.push({ assetId: '__viewport__', values: { ...camera, nextSlot: nextSlot || 0 } })
   if (!changes.length)
