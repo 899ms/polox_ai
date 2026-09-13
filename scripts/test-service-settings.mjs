@@ -41,12 +41,13 @@ test('green requires both successful tests and resets when settings change', () 
 test('one WaveSpeed key authenticates both LLM and account checks', async () => {
  const {db,settings:s}=harness()
  const saved=s.updateServiceSettings({wavespeedKey:'private-wave',llmModel:'provider/model'})
+ assert.equal(saved.llmModel,'moonshotai/kimi-k3')
  const urls=[]
  const api=load('serviceConnection',{'./serviceSettings':s}, {fetch:async(url,init)=>{
   urls.push(url)
   assert.equal(init.headers.Authorization,'Bearer private-wave')
   if(url === 'https://llm.wavespeed.ai/v1/chat/completions') {
-   assert.equal(JSON.parse(init.body).model,'provider/model')
+   assert.equal(JSON.parse(init.body).model,'moonshotai/kimi-k3')
    return {ok:true,status:200,json:async()=>({choices:[{message:{content:'OK'}}]})}
   }
   assert.equal(url,'https://api.wavespeed.ai/api/v3/balance')
