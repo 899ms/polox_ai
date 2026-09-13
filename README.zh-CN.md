@@ -20,6 +20,15 @@
   遇到无法解决的问题，请通过 <a href="https://discord.gg/FwN6s664Dh">Discord</a> 联系我。
 </p>
 
+
+<div style="overflow-x: auto; white-space: nowrap; max-width: 100%; margin: 1rem 0 1.5rem; padding-bottom: 0.5rem;">
+  <img src="docs/images/polox-readme-01-hero.jpeg" alt="PoloX AI — Agent 原生创作平台" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
+  <img src="docs/images/polox-readme-02-unified-space.jpeg" alt="PoloX AI — Agent 对话与无限画布统一工作区" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
+  <img src="docs/images/polox-readme-03-skills.jpeg" alt="PoloX AI 技能 — 草图生图、图片文字编辑、图层拆分、Product Hunt gallery" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
+  <img src="docs/images/polox-readme-04-models.jpeg" alt="PoloX AI — 一站式图像与视频模型工作区" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
+  <img src="docs/images/polox-readme-05-utilities.jpeg" alt="PoloX AI — 图片与视频日常工具" height="280" style="display: inline-block; border-radius: 8px;" />
+</div>
+
 ## 简介
 
 本项目是 [PoloX AI](https://polox.ai) 的开源版本，与 [Lovart](https://lovart.ai)、[Crepal](https://crepal.ai) 同属 AI 创作平台。PoloX 采用 **Agent 原生**的产品设计：以 Agent 对话与无限画布承载全部交互，将创作、生成与编辑融入连续的工作流程。你只需描述想法，与 Agent 沟通，并在画布上持续完善结果。
