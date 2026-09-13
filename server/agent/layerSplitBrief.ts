@@ -78,7 +78,7 @@ export function layerSplitNeedsPlan(messages: ChatMessage[]) {
     : Array.isArray(message.content) ? message.content.filter(part => part.type === 'text').map(part => part.text).join('\n') : ''
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index]!
-    if (message.role === 'user' && !message.internal && textOf(message).includes('(model:image-layer-splitter)')) {
+    if (message.role === 'user' && !message.internal && (textOf(message).includes('(model:image-layer-splitter)') || /(?:^|\s)\/image-layer-splitter(?=\s|$)/.test(textOf(message)))) {
       start = index
       break
     }
@@ -90,6 +90,7 @@ export function layerSplitNeedsPlan(messages: ChatMessage[]) {
     if (message.role === 'user' && !message.internal) {
       const text = textOf(message).split('\n\nAttached stills:')[0]!
         .replace(/@\[[^\]]+\]\(model:[^\s)]+\)/g, '')
+        .replace(/(?:^|\s)\/image-layer-splitter(?=\s|$)/g, '')
         .replace('Use the attached still(s).', '')
         .trim()
       if (text)

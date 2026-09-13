@@ -1,3 +1,5 @@
+import { cpSync, mkdirSync } from 'node:fs'
+import { resolve } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import { USEFUL_TOOLS } from './app/constants/usefulTools'
 
@@ -15,7 +17,7 @@ export default defineNuxtConfig({
       companyName: 'Vision Forge Co., Ltd',
       heroTitle: 'Open-source. Agent-native.',
       heroTagline: 'creative platform.',
-      heroDescription: 'Create images, videos, music, and more with leading generative AI models through the Polox Studio Agent. Just describe your vision and bring it to life through conversation.',
+      heroDescription: 'Every interaction lives in agent conversations and an infinite canvas, bringing all design and creative work into one unified space.',
       apiUrl: '',
     },
   },
@@ -130,7 +132,7 @@ export default defineNuxtConfig({
       meta: [
         {
           name: 'description',
-          content: 'Create images, videos, music, and more with leading generative AI models through the Polox Studio Agent. Just describe your vision and bring it to life through conversation.',
+          content: 'Every interaction lives in agent conversations and an infinite canvas, bringing all design and creative work into one unified space.',
         },
       ],
     },
@@ -159,6 +161,13 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-03-13',
 
   nitro: {
+    hooks: {
+      compiled(nitro) {
+        const destination = resolve(nitro.options.output.serverDir, 'agent-skills')
+        mkdirSync(destination, { recursive: true })
+        cpSync(resolve(nitro.options.rootDir, 'server/agent/skills'), destination, { recursive: true })
+      },
+    },
     imports: {
       // Agent runtime is imported explicitly; avoid clashing with shared/* type names.
       exclude: [

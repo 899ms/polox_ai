@@ -2,7 +2,7 @@ import type { ImageLayerRegion } from '~~/shared/utils/imageLayerSplitter'
 import { imageLayerSelectionPrompt } from '~~/shared/utils/imageLayerSplitter'
 import { firstHttpUrl } from './mediaInput'
 
-export const IMAGE_LAYER_SPLITTER_ENDPOINT = 'bytedance/seedream/v5/pro/layerize'
+export const IMAGE_LAYER_SPLITTER_ENDPOINT = 'bytedance/seedream-v5.0-pro/layer-decomposition'
 
 export function sanitizeImageLayerInput(input: Record<string, unknown>): Record<string, unknown> {
   const regions = input.regions ?? []
@@ -14,11 +14,11 @@ export function sanitizeImageLayerInput(input: Record<string, unknown>): Record<
     throw createError({ statusCode: 400, statusMessage: 'Invalid image selection' })
   }
   return {
-    image_url: firstHttpUrl(input.image_url, 'image_url', true),
+    image: firstHttpUrl(input.image_url, 'image_url', true),
     prompt: imageLayerSelectionPrompt(regions as ImageLayerRegion[]),
-    image_size: 'auto_2K',
-    enhance_prompt_mode: 'fast',
-    enable_safety_checker: true,
+    resolution: '2k',
+    prompt_optimization_mode: 'fast',
+    output_format: 'png',
   }
 }
 

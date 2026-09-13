@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import type { ImageAnnotationPoint } from '~~/shared/utils/imageAnnotations'
 import type { ImageLayerHandle, ImageLayerRegion } from '~~/shared/utils/imageLayerSplitter'
 import { useElementSize } from '@vueuse/core'
-import { Hand, Maximize, MousePointer2, Scan, SquareDashed, Trash2, Upload, ZoomIn, ZoomOut } from 'lucide-vue-next'
+import { Hand, MapPin, Maximize, MousePointer2, Scan, SquareDashed, Trash2, Upload, ZoomIn, ZoomOut } from 'lucide-vue-next'
 import { imageLayerRegionFromPoints, transformImageLayerRegion } from '~~/shared/utils/imageLayerSplitter'
 
-const props = defineProps<{ src: string, disabled?: boolean, fixedRegions?: boolean, hideLabels?: boolean, sidebarTitle?: string }>()
+const props = defineProps<{ src: string, disabled?: boolean, fixedRegions?: boolean, hideLabels?: boolean, sidebarTitle?: string, pointMode?: boolean }>()
 const emit = defineEmits<{ selecting: [value: boolean], pick: [], load: [], error: [] }>()
 const regions = defineModel<ImageLayerRegion[]>({ default: () => [] })
+const points = defineModel<ImageAnnotationPoint[]>('points', { default: () => [] })
 const imageRef = ref<HTMLImageElement>()
 const loaded = ref(false)
 const viewportRef = ref<HTMLDivElement>()
@@ -52,7 +54,8 @@ async function setZoom(value: number) {
 function selectObject(index: number) {
   setTool('select')
   activeIndex.value = index
-  const box = regions.value[index]
+  const annotation = props.pointMode ? points.value[index] : undefined
+  const box: ImageLayerRegion | undefined = annotation ? [annotation.x, annotation.y, annotation.x, annotation.y] : regions.value[index]
   const viewport = viewportRef.value
   if (box && viewport) {
     const left = Math.max(16, (viewport.clientWidth - imageWidth.value) / 2)
@@ -97,6 +100,8 @@ let start: { x: number, y: number } | null = null
 let pointerId: number | null = null
 let captureTarget: HTMLElement | null = null
 let panStart: { x: number, y: number, left: number, top: number } | null = null
+let pointEditing: { index: number, origin: { x: number, y: number }, point: ImageAnnotationPoint } | null = null
+let pointStart: { x: number, y: number, clientX: number, clientY: number } | null = null
 let editing: { index: number, box: ImageLayerRegion, origin: { x: number, y: number }, handle?: ImageLayerHandle } | null = null
 const handles: { id: ImageLayerHandle, x: number, y: number, cursor: string, label: string }[] = [
   { id: 'nw', x: 0, y: 0, cursor: 'nwse-resize', label: 'top left' },
@@ -141,7 +146,24 @@ function begin(event: PointerEvent) {
   else {
     const position = point(event)
     const inside = position.x >= 0 && position.x <= 1000 && position.y >= 0 && position.y <= 1000
-    if (activeTool.value === 'select') {
+    if (props.pointMode) {
+      const marker = (event.target as HTMLElement).closest<HTMLElement>('[data-annotation-index]')
+      const index = marker ? Number(marker.dataset.annotationIndex) : -1
+      const annotation = points.value[index]
+      if (annotation) {
+        activeIndex.value = index
+        pointEditing = { index, origin: position, point: { ...annotation } }
+      }
+      else if (activeTool.value === 'draw' && inside && points.value.length < 16) {
+        pointStart = { ...position, clientX: event.clientX, clientY: event.clientY }
+      }
+      else {
+        activeIndex.value = -1
+        return
+      }
+      emit('selecting', true)
+    }
+    else if (activeTool.value === 'select') {
       activeIndex.value = -1
       if (inside) {
         for (let index = regions.value.length - 1; index >= 0; index--) {
@@ -177,6 +199,17 @@ function move(event: PointerEvent) {
     viewportRef.value.scrollLeft = panStart.left - (event.clientX - panStart.x)
     viewportRef.value.scrollTop = panStart.top - (event.clientY - panStart.y)
   }
+  else if (pointEditing) {
+    const position = point(event)
+    const { index, origin, point: original } = pointEditing
+    points.value = points.value.map((annotation, i) => i === index
+      ? {
+          ...annotation,
+          x: Math.round(Math.max(0, Math.min(1000, original.x + position.x - origin.x))),
+          y: Math.round(Math.max(0, Math.min(1000, original.y + position.y - origin.y))),
+        }
+      : annotation)
+  }
   else if (editing) {
     const position = point(event)
     const updated = transformImageLayerRegion(editing.box, position.x - editing.origin.x, position.y - editing.origin.y, editing.handle)
@@ -195,6 +228,8 @@ function cancel() {
   captureTarget = null
   panStart = null
   editing = null
+  pointEditing = null
+  pointStart = null
   isPanning.value = false
   draft.value = null
   emit('selecting', false)
@@ -206,6 +241,10 @@ function finish(event: PointerEvent) {
   if (pointerId !== event.pointerId)
     return
   move(event)
+  if (pointStart && Math.hypot(event.clientX - pointStart.clientX, event.clientY - pointStart.clientY) < 5) {
+    activeIndex.value = points.value.length
+    points.value = [...points.value, { x: Math.round(pointStart.x), y: Math.round(pointStart.y), text: '' }]
+  }
   if (draft.value && draft.value[2] - draft.value[0] >= 5 && draft.value[3] - draft.value[1] >= 5) {
     activeIndex.value = regions.value.length
     regions.value = [...regions.value, draft.value]
@@ -226,7 +265,7 @@ onBeforeUnmount(cancel)
     <div class="min-w-0 bg-muted/20">
       <div class="flex h-11 items-center justify-between gap-2 border-b border-border px-3">
         <div class="flex shrink-0 items-center gap-1" role="group" aria-label="Canvas tools">
-          <button v-for="tool in ([{ id: 'draw', label: 'Draw box', icon: SquareDashed }, { id: 'select', label: 'Select object', icon: MousePointer2 }, { id: 'pan', label: 'Pan canvas', icon: Hand }] as const).filter(tool => !fixedRegions || tool.id !== 'draw')" :key="tool.id" type="button" class="inline-flex size-7 items-center justify-center rounded-md border transition-colors disabled:opacity-30" :class="activeTool === tool.id ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'" :aria-label="tool.label" :aria-pressed="activeTool === tool.id" :title="tool.label" :disabled="!loaded || disabled" @click="setTool(tool.id)">
+          <button v-for="tool in ([{ id: 'draw', label: pointMode ? 'Add annotation point' : 'Draw box', icon: pointMode ? MapPin : SquareDashed }, { id: 'select', label: 'Select object', icon: MousePointer2 }, { id: 'pan', label: 'Pan canvas', icon: Hand }] as const).filter(tool => !fixedRegions || tool.id !== 'draw')" :key="tool.id" type="button" class="inline-flex size-7 items-center justify-center rounded-md border transition-colors disabled:opacity-30" :class="activeTool === tool.id ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'" :aria-label="tool.label" :aria-pressed="activeTool === tool.id" :title="tool.label" :disabled="!loaded || disabled" @click="setTool(tool.id)">
             <component :is="tool.icon" class="size-4" />
           </button>
         </div>
@@ -268,7 +307,20 @@ onBeforeUnmount(cancel)
             role="group"
             aria-label="Image selection canvas"
           >
-            <img ref="imageRef" :src="src" :alt="fixedRegions ? 'Image with editable text regions' : 'Image to separate into layers'" draggable="false" class="block size-full max-w-none" @load="onImageLoad" @error="loaded = false; emit('error')">
+            <img ref="imageRef" :src="src" :alt="pointMode ? 'Image to annotate' : fixedRegions ? 'Image with editable text regions' : 'Image to separate into layers'" draggable="false" class="block size-full max-w-none" @load="onImageLoad" @error="loaded = false; emit('error')">
+            <template v-if="loaded && pointMode">
+              <button
+                v-for="(annotation, index) in points" :key="index" type="button"
+                :data-annotation-index="index"
+                class="absolute flex size-7 -translate-x-1/2 -translate-y-1/2 touch-none items-center justify-center rounded-md border border-zinc-950 text-xs font-semibold text-zinc-950 shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                :class="[activeIndex === index ? 'ring-2 ring-white/60' : '', activeTool === 'pan' ? canvasCursor : 'cursor-move']"
+                :style="{ backgroundColor: objectColor(index), left: `clamp(14px, ${annotation.x / 10}%, calc(100% - 14px))`, top: `clamp(14px, ${annotation.y / 10}%, calc(100% - 14px))` }"
+                :aria-label="`Annotation point ${index + 1}`" :aria-pressed="activeIndex === index" :disabled="disabled"
+                @keydown.enter.prevent="selectObject(index)" @keydown.space.prevent="selectObject(index)"
+              >
+                {{ index + 1 }}
+              </button>
+            </template>
             <svg v-if="loaded" class="pointer-events-none absolute inset-0 size-full overflow-visible" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
               <g v-for="(box, index) in [...regions, ...(draft ? [draft] : [])]" :key="index">
                 <rect :x="box[0]" :y="box[1]" :width="box[2] - box[0]" :height="box[3] - box[1]" :fill="`${objectColor(index)}${index === activeIndex ? '26' : '0a'}`" stroke="#111827" stroke-width="1" vector-effect="non-scaling-stroke" />

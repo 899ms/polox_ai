@@ -1,7 +1,7 @@
-import type { AiCategory, AiModelConfig, AiTask, SchemaProperty } from '../types/aiModel'
-import { FLUX_3_ASPECT_RATIOS, FLUX_3_DURATIONS, FLUX_3_I2V_MODEL, FLUX_3_RESOLUTIONS, FLUX_3_T2V_MODEL } from '~~/shared/utils/flux3'
-import { IDEOGRAM_REMOVE_BACKGROUND_MAX_BYTES, IDEOGRAM_REMOVE_BACKGROUND_MODEL } from '~~/shared/utils/ideogram'
-import { falFormSchema } from '../utils/falSchema'
+import type { AiCategory, AiModelConfig, AiTask } from '../types/aiModel'
+import { FLUX_3_I2V_MODEL, FLUX_3_T2V_MODEL } from '~~/shared/utils/flux3'
+import { IDEOGRAM_REMOVE_BACKGROUND_MODEL } from '~~/shared/utils/ideogram'
+import { wavespeedFormSchema } from '../utils/wavespeedSchema'
 
 export const AI_CATEGORIES: AiCategory[] = ['Image', 'Video']
 
@@ -22,67 +22,6 @@ export function getTaskAbbr(task: AiTask) {
   return TASK_ABBR[task]
 }
 
-const FLUX_3_PROMPT: SchemaProperty = {
-  'description': 'Describe the video: subject, motion, camera, and atmosphere.',
-  'minLength': 1,
-  'maxLength': 20000,
-  'type': 'string',
-  'x-placeholder': 'Describe the video you want to generate',
-}
-
-const FLUX_3_ASPECT_RATIO: SchemaProperty = {
-  'default': 'auto',
-  'description': 'Aspect ratio of the generated video.',
-  'enum': [...FLUX_3_ASPECT_RATIOS],
-  'type': 'string',
-  'x-placeholder': 'Select aspect ratio',
-}
-
-const FLUX_3_RESOLUTION: SchemaProperty = {
-  default: '720p',
-  description: '720p is faster; 1080p is higher quality.',
-  enum: [...FLUX_3_RESOLUTIONS],
-  type: 'string',
-}
-
-const FLUX_3_DURATION: SchemaProperty = {
-  default: '10',
-  description: 'Video length in seconds.',
-  enum: FLUX_3_DURATIONS.map(String),
-  type: 'string',
-}
-
-const FLUX_3_GENERATE_AUDIO: SchemaProperty = {
-  default: true,
-  description: 'Generate audio with the video.',
-  type: 'boolean',
-}
-
-const FLUX_3_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp'
-
-const FLUX_3_FIRST_FRAME: SchemaProperty = {
-  'description': 'Required start frame. JPEG, PNG, or WEBP. 30MB max.',
-  'items': { type: 'string' },
-  'maxItems': 1,
-  'minItems': 1,
-  'type': 'array',
-  'x-accept': FLUX_3_IMAGE_ACCEPT,
-  'x-label': 'First frame',
-  'x-max-bytes': 30 * 1024 * 1024,
-  'x-ui-component': 'uploaders',
-}
-
-const FLUX_3_LAST_FRAME: SchemaProperty = {
-  'description': 'Optional end frame. JPEG, PNG, or WEBP. 30MB max.',
-  'items': { type: 'string' },
-  'maxItems': 1,
-  'type': 'array',
-  'x-accept': FLUX_3_IMAGE_ACCEPT,
-  'x-label': 'Last frame',
-  'x-max-bytes': 30 * 1024 * 1024,
-  'x-ui-component': 'uploaders',
-}
-
 export const AI_MODELS: AiModelConfig[] = [
   {
     id: 'seedream/5-pro-text-to-image',
@@ -91,7 +30,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Text to Image',
 
     icon: 'lucide:image',
-    schema: falFormSchema('seedream/5-pro-text-to-image')!,
+    schema: wavespeedFormSchema('seedream/5-pro-text-to-image')!,
   },
   {
     id: 'seedream/5-pro-image-to-image',
@@ -100,7 +39,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Image to Image',
 
     icon: 'lucide:images',
-    schema: falFormSchema('seedream/5-pro-image-to-image')!,
+    schema: wavespeedFormSchema('seedream/5-pro-image-to-image')!,
   },
   {
     id: 'gpt-image-2-text-to-image',
@@ -109,7 +48,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Text to Image',
 
     icon: 'lucide:sparkles',
-    schema: falFormSchema('gpt-image-2-text-to-image')!,
+    schema: wavespeedFormSchema('gpt-image-2-text-to-image')!,
   },
   {
     id: 'gpt-image-2-image-to-image',
@@ -118,7 +57,23 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Image to Image',
 
     icon: 'lucide:sparkles',
-    schema: falFormSchema('gpt-image-2-image-to-image')!,
+    schema: wavespeedFormSchema('gpt-image-2-image-to-image')!,
+  },
+  {
+    id: 'gpt-image-2-5-flare-image-to-image',
+    name: 'GPT Image 2.5 Flare',
+    category: 'Image',
+    task: 'Image to Image',
+    icon: 'lucide:sparkles',
+    schema: wavespeedFormSchema('gpt-image-2-5-flare-image-to-image'),
+  },
+  {
+    id: 'gpt-image-2-5-sunburst-image-to-image',
+    name: 'GPT Image 2.5 Sunburst',
+    category: 'Image',
+    task: 'Image to Image',
+    icon: 'lucide:sparkles',
+    schema: wavespeedFormSchema('gpt-image-2-5-sunburst-image-to-image'),
   },
   {
     id: 'nano-banana-2-text-to-image',
@@ -127,7 +82,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Text to Image',
 
     icon: 'lucide:banana',
-    schema: falFormSchema('nano-banana-2-text-to-image')!,
+    schema: wavespeedFormSchema('nano-banana-2-text-to-image')!,
   },
   {
     id: 'nano-banana-2-image-to-image',
@@ -136,7 +91,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Image to Image',
 
     icon: 'lucide:banana',
-    schema: falFormSchema('nano-banana-2-image-to-image')!,
+    schema: wavespeedFormSchema('nano-banana-2-image-to-image')!,
   },
   {
     id: 'nano-banana-2-lite-text-to-image',
@@ -145,7 +100,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Text to Image',
 
     icon: 'lucide:banana',
-    schema: falFormSchema('nano-banana-2-lite-text-to-image')!,
+    schema: wavespeedFormSchema('nano-banana-2-lite-text-to-image')!,
   },
   {
     id: 'nano-banana-2-lite-image-to-image',
@@ -154,7 +109,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Image to Image',
 
     icon: 'lucide:banana',
-    schema: falFormSchema('nano-banana-2-lite-image-to-image')!,
+    schema: wavespeedFormSchema('nano-banana-2-lite-image-to-image')!,
   },
   {
     id: 'nano-banana-pro-text-to-image',
@@ -163,7 +118,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Text to Image',
 
     icon: 'lucide:banana',
-    schema: falFormSchema('nano-banana-pro-text-to-image')!,
+    schema: wavespeedFormSchema('nano-banana-pro-text-to-image')!,
   },
   {
     id: 'nano-banana-pro-image-to-image',
@@ -172,7 +127,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Image to Image',
 
     icon: 'lucide:banana',
-    schema: falFormSchema('nano-banana-pro-image-to-image')!,
+    schema: wavespeedFormSchema('nano-banana-pro-image-to-image')!,
   },
   {
     id: FLUX_3_T2V_MODEL,
@@ -181,29 +136,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Text to Video',
 
     icon: 'lucide:clapperboard',
-    schema: {
-      components: {
-        schemas: {
-          Input: {
-            'properties': {
-              prompt: FLUX_3_PROMPT,
-              aspect_ratio: FLUX_3_ASPECT_RATIO,
-              resolution: FLUX_3_RESOLUTION,
-              duration: FLUX_3_DURATION,
-              generate_audio: FLUX_3_GENERATE_AUDIO,
-            },
-            'required': ['prompt', 'aspect_ratio', 'resolution', 'duration'],
-            'x-order-properties': [
-              'prompt',
-              'aspect_ratio',
-              'resolution',
-              'duration',
-              'generate_audio',
-            ],
-          },
-        },
-      },
-    },
+    schema: wavespeedFormSchema(FLUX_3_T2V_MODEL),
   },
   {
     id: FLUX_3_I2V_MODEL,
@@ -212,33 +145,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Image to Video',
 
     icon: 'lucide:clapperboard',
-    schema: {
-      components: {
-        schemas: {
-          Input: {
-            'properties': {
-              prompt: FLUX_3_PROMPT,
-              first_frame_url: FLUX_3_FIRST_FRAME,
-              last_frame_url: FLUX_3_LAST_FRAME,
-              aspect_ratio: FLUX_3_ASPECT_RATIO,
-              resolution: FLUX_3_RESOLUTION,
-              duration: FLUX_3_DURATION,
-              generate_audio: FLUX_3_GENERATE_AUDIO,
-            },
-            'required': ['prompt', 'first_frame_url', 'aspect_ratio', 'resolution', 'duration'],
-            'x-order-properties': [
-              'prompt',
-              'first_frame_url',
-              'last_frame_url',
-              'aspect_ratio',
-              'resolution',
-              'duration',
-              'generate_audio',
-            ],
-          },
-        },
-      },
-    },
+    schema: wavespeedFormSchema(FLUX_3_I2V_MODEL),
   },
   {
     id: 'bytedance/seedance-2-5-text-to-video',
@@ -247,7 +154,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Text to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('bytedance/seedance-2-5-text-to-video')!,
+    schema: wavespeedFormSchema('bytedance/seedance-2-5-text-to-video')!,
   },
   {
     id: 'bytedance/seedance-2-5-image-to-video',
@@ -256,7 +163,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Image to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('bytedance/seedance-2-5-image-to-video')!,
+    schema: wavespeedFormSchema('bytedance/seedance-2-5-image-to-video')!,
   },
   {
     id: 'bytedance/seedance-2-5-reference-to-video',
@@ -265,7 +172,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Reference to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('bytedance/seedance-2-5-reference-to-video')!,
+    schema: wavespeedFormSchema('bytedance/seedance-2-5-reference-to-video')!,
   },
   {
     id: 'bytedance/seedance-2-text-to-video',
@@ -274,7 +181,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Text to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('bytedance/seedance-2-text-to-video')!,
+    schema: wavespeedFormSchema('bytedance/seedance-2-text-to-video')!,
   },
   {
     id: 'bytedance/seedance-2-image-to-video',
@@ -283,7 +190,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Image to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('bytedance/seedance-2-image-to-video')!,
+    schema: wavespeedFormSchema('bytedance/seedance-2-image-to-video')!,
   },
   {
     id: 'bytedance/seedance-2-reference-to-video',
@@ -292,7 +199,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Reference to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('bytedance/seedance-2-reference-to-video')!,
+    schema: wavespeedFormSchema('bytedance/seedance-2-reference-to-video')!,
   },
   {
     id: 'minimax-h3/text-to-video',
@@ -301,7 +208,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Text to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('minimax-h3/text-to-video')!,
+    schema: wavespeedFormSchema('minimax-h3/text-to-video')!,
   },
   {
     id: 'minimax-h3/image-to-video',
@@ -310,7 +217,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Image to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('minimax-h3/image-to-video')!,
+    schema: wavespeedFormSchema('minimax-h3/image-to-video')!,
   },
   {
     id: 'minimax-h3/reference-to-video',
@@ -319,7 +226,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Reference to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('minimax-h3/reference-to-video')!,
+    schema: wavespeedFormSchema('minimax-h3/reference-to-video')!,
   },
   {
     id: 'wan/3-0-video-text-to-video',
@@ -328,7 +235,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Text to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('wan/3-0-video-text-to-video')!,
+    schema: wavespeedFormSchema('wan/3-0-video-text-to-video')!,
   },
   {
     id: 'wan/3-0-video-image-to-video',
@@ -337,7 +244,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Image to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('wan/3-0-video-image-to-video')!,
+    schema: wavespeedFormSchema('wan/3-0-video-image-to-video')!,
   },
   {
     id: 'wan/3-0-video-reference-to-video',
@@ -346,7 +253,7 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Reference to Video',
 
     icon: 'lucide:clapperboard',
-    schema: falFormSchema('wan/3-0-video-reference-to-video')!,
+    schema: wavespeedFormSchema('wan/3-0-video-reference-to-video')!,
   },
   {
     id: IDEOGRAM_REMOVE_BACKGROUND_MODEL,
@@ -355,35 +262,15 @@ export const AI_MODELS: AiModelConfig[] = [
     task: 'Remove Background',
 
     icon: 'lucide:eraser',
-    schema: {
-      components: {
-        schemas: {
-          Input: {
-            'properties': {
-              image_url: {
-                'description': 'The image to isolate. JPEG, PNG, WEBP, GIF, or AVIF. 10MB max.',
-                'items': { type: 'string' },
-                'maxItems': 1,
-                'minItems': 1,
-                'type': 'array',
-                'x-accept': 'image/jpeg,image/png,image/webp,image/gif,image/avif',
-                'x-label': 'Image',
-                'x-max-bytes': IDEOGRAM_REMOVE_BACKGROUND_MAX_BYTES,
-                'x-ui-component': 'uploaders',
-              },
-            },
-            'required': ['image_url'],
-            'x-order-properties': ['image_url'],
-          },
-        },
-      },
-    },
+    schema: wavespeedFormSchema(IDEOGRAM_REMOVE_BACKGROUND_MODEL),
   },
 ]
 
 export const MODEL_COMPANIES: Record<string, string> = {
   'Seedream 5.0 Pro': 'ByteDance',
   'GPT Image 2': 'OpenAI',
+  'GPT Image 2.5 Flare': 'OpenAI',
+  'GPT Image 2.5 Sunburst': 'OpenAI',
   'Nano Banana 2': 'Google',
   'Nano Banana 2 Lite': 'Google',
   'Nano Banana Pro': 'Google',

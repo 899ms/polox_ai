@@ -1,4 +1,3 @@
-import { uploadFalFile } from '../utils/falFiles'
 import { saveMediaFile } from '../utils/localMedia'
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
@@ -23,6 +22,5 @@ export async function uploadAgentImage(sessionId: string, file: {
   if (!sessionId)
     throw new Error('A session is required')
   const key = `agent-lab/${encodeURIComponent(sessionId)}/${crypto.randomUUID()}.${extension}`
-  await saveMediaFile(key, file.bytes, file.mime)
-  return uploadFalFile(file.bytes, file.mime, `upload.${extension}`)
+  return saveMediaFile(key, file.bytes, file.mime)
 }

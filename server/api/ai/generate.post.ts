@@ -1,4 +1,5 @@
 import { isImageLayerSplitterModel } from '~~/shared/utils/imageLayerSplitter'
+import { generationProvider, wavespeedEndpoint } from '../../../shared/utils/wavespeedSchema'
 import { GenerationJob } from '../../models/generationJob'
 import { isFalGenerateModel } from '../../utils/falGenerate'
 import { falEndpoint } from '../../utils/falInput'
@@ -19,7 +20,7 @@ export default defineEventHandler(async (event) => {
   }>(event)
   const model = String(body?.model || '').trim()
   const useFal = isFalGenerateModel(model)
-  if (!useFal) {
+  if (!useFal && !wavespeedEndpoint(model)) {
     throw createError({
       statusCode: 400,
       statusMessage: 'This model is not available for generation yet',
@@ -29,11 +30,11 @@ export default defineEventHandler(async (event) => {
   const input = sanitizeGenerateInput(model, rawInput)
   await connectDatabase()
   const project = await resolveProject(body?.projectId)
-  const requestBody = { model: falEndpoint(model, input), input }
+  const requestBody = { model: wavespeedEndpoint(model) || falEndpoint(model, input), input }
   try {
     const job = await GenerationJob.create({
       projectId: String(project._id),
-      provider: 'fal',
+      provider: generationProvider(model),
       model,
       category: (isImageLayerSplitterModel(model) ? 'Tools' : String(body?.category || '')),
       task: (isImageLayerSplitterModel(model) ? 'Split Image Layers' : String(body?.task || '')),

@@ -1,0 +1,87 @@
+{
+  "bytedance/seedream-v5.0-pro/layer-decomposition": {
+    "additionalProperties": false,
+    "properties": {
+      "image": {
+        "description": "The image to decompose into layers.",
+        "type": "string"
+      },
+      "output_format": {
+        "default": "jpeg",
+        "description": "The format of the output image.",
+        "enum": [
+          "jpeg",
+          "png"
+        ],
+        "type": "string"
+      },
+      "prompt": {
+        "description": "The positive prompt for the generation.",
+        "type": "string",
+        "x-rows": 4,
+        "x-ui-component": "textarea"
+      },
+      "prompt_optimization_mode": {
+        "default": "standard",
+        "description": "Prompt optimization mode. The model rewrites your prompt before generating. 'standard' uses the full rewrite; 'fast' uses a lighter one that generates several times quicker but follows long or intricate prompts less closely, and is served only by the upstream providers that honour it, so it has less failover depth.",
+        "enum": [
+          "standard",
+          "fast"
+        ],
+        "type": "string",
+        "x-ui-component": "select"
+      },
+      "resolution": {
+        "default": "1k",
+        "description": "The size of the generated media in pixels (width*height).",
+        "enum": [
+          "1k",
+          "1.5k",
+          "2k"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "image"
+    ],
+    "type": "object",
+    "x-order-properties": [
+      "image",
+      "prompt",
+      "resolution",
+      "output_format",
+      "prompt_optimization_mode"
+    ]
+  },
+  "bria/remove-background": {
+    "additionalProperties": false,
+    "properties": {
+      "enable_base64_output": {
+        "default": false,
+        "description": "If set to `true`, the prediction's `output` strings are returned as **naked base64** (no `data:<mime>;base64,` prefix). When `false` (default), outputs are returned as URLs pointing to our CDN.",
+        "disabled": true,
+        "type": "boolean"
+      },
+      "enable_sync_mode": {
+        "default": false,
+        "description": "If set to `true`, the request attempts to wait for the generated result and return outputs in the same response. If the result is not ready within the sync wait window, the API can return a timeout body while the task continues processing. This option is only available via the API and is supported only by some models.",
+        "disabled": true,
+        "type": "boolean"
+      },
+      "image": {
+        "description": "The URL of the image to erase.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "image"
+    ],
+    "type": "object",
+    "x-order-properties": [
+      "image",
+      "enable_sync_mode",
+      "enable_base64_output"
+    ]
+  }
+}

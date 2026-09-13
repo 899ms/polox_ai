@@ -1,7 +1,7 @@
 {
   "name": "polox_ai",
   "type": "module",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "packageManager": "pnpm@10.10.0",
   "description": "An open-source, agent-native platform for multimodal AI generation, built on DeepSeek Harness. Every interaction lives in agent conversations and an infinite canvas, unifying creation, generation, and editing.",
   "author": "Dian Pratama <dianpratama2@gmail.com>",
@@ -51,7 +51,9 @@
     "format": "eslint --fix .",
     "release": "release-it",
     "test:sqlite": "node --experimental-transform-types --test scripts/test-sqlite.mjs scripts/test-agent-history.mjs scripts/test-local-data-migration.mjs scripts/test-local-generation-queue.mjs",
-    "test:media": "node --experimental-transform-types --test scripts/test-local-media.mjs scripts/test-agent-upload.mjs scripts/test-image-text-editor.mjs scripts/test-media-export.mjs"
+    "test:media": "node --experimental-transform-types --test scripts/test-local-media.mjs scripts/test-agent-upload.mjs scripts/test-image-text-editor.mjs scripts/test-media-export.mjs",
+    "browser:install": "playwright install chromium",
+    "browser:install:linux": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@fal-ai/client": "^1.10.1",
@@ -67,10 +69,12 @@
     "embla-carousel": "^8.6.0",
     "embla-carousel-vue": "^8.6.0",
     "fflate": "^0.8.3",
+    "ipaddr.js": "^2.5.0",
     "isomorphic-dompurify": "^4.1.0",
     "marked": "^18.0.11",
     "mingo": "^7.2.4",
     "nanoid": "^5.1.6",
+    "playwright": "^1.63.0",
     "reka-ui": "^2.5.1",
     "sharp": "^0.35.4",
     "tailwindcss": "^4.1.14",

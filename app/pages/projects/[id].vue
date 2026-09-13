@@ -29,7 +29,7 @@ const { projects, selectedProjectId, loadProjects } = useProjects()
 const route = useRoute()
 const nuxtApp = useNuxtApp()
 const projectId = computed(() => String(route.params.id || ''))
-const { sessionId: agentSessionId, messages, images, allImages, status, waitingForUserConfirm, waitingForUserChoice, pending: agentPending, draft, attachments, attaching, error: agentError, sendMessage, stopAgent, stopping, attachFiles, attachUrls, removeAttachment, resolveConfirmation, resolveChoice, qualityPreference, confirmPolicy, agents, activeAgentId, canCreateAgent, canSwitchAgent, createAgent, selectAgent, queueNotice, applyCanvasJobs } = useAgentLab({
+const { sessionId: agentSessionId, messages, images, allImages, status, waitingForUserConfirm, waitingForUserChoice, pending: agentPending, draft, attachments, attaching, error: agentError, sendMessage, stopAgent, stopping, attachFiles, uploadAnnotationImage, attachUrls, removeAttachment, resolveConfirmation, resolveChoice, qualityPreference, confirmPolicy, agents, activeAgentId, canCreateAgent, canSwitchAgent, createAgent, selectAgent, queueNotice, applyCanvasJobs } = useAgentLab({
   projectId,
   onJobs(jobs) {
     for (const job of jobs)
@@ -476,7 +476,10 @@ function onAttachCanvas(payload: {
               :messages="messages"
               :session-id="agentSessionId"
               :images="images"
+              :project-images="allImages"
               :project-jobs="items"
+              :upload-annotation-image="uploadAnnotationImage"
+              :save-sketch="file => sendMessage({ sketchFile: file })"
               :attachments="attachments"
               :status="status"
               :pending="agentPending"

@@ -1,6 +1,6 @@
 # Long-form video
 
-Write chat replies and user-facing card text in the user's preferred language, including introductions, recommendations, question titles, questions, option labels, and descriptions. Follow the latest explicit language preference; otherwise use the language of the user's messages. Write image/video generation instructions in English, but keep quoted dialogue and narration in the confirmed spoken language; do not translate those spoken lines into English unless English was selected. Reference material does not override the user's language preference. Every ask_user question must include an Other option with `allow_custom: true` so the user can enter a custom answer.
+Write image/video generation instructions in English; keep quoted dialogue and narration in the confirmed spoken language; do not translate those spoken lines into English unless English was selected. Every ask_user question must include an Other option with `allow_custom: true` so the user can enter a custom answer.
 
 Seedance clips max out at 15s (Economy / 2.0) or 30s (High quality / 2.5). Wan 3.0 clips max out at 30s. A request for a longer video, a short film, a storyboard, long-form video, or a multi-beat story is **not** one `generate_video` call.
 
@@ -155,6 +155,8 @@ Write numbered shots **in chat only**. Each shot: duration, ratio, who is on scr
 
 **This is a blocking prerequisite for every main or recurring character, before any storyboard image, shot first frame, or video clip.** A text-only shot list may be drafted and confirmed first. Do not discover the missing reference after generating shot images. Skip this gate only when the film has no main or recurring characters.
 
+Recurring means appearing in more than one shot. Every recurring character must have a usable full-body identity reference before any shot media: the user's designated identity image, or a generated horizontal 16:9 full-body three-view sheet (front, side, back) when no usable image exists. One-off characters — including a main character who appears in a single shot — do not require a three-view; keep their written appearance in the prompt for the shot(s) where they appear.
+
 ### 1. Ask about the reference source, then wait
 
 - Check the conversation and attached images for each character. An existing image counts only when the user supplied or selected it as that character's identity reference; an unrelated image, style reference, or textual appearance description does not count.
@@ -210,7 +212,7 @@ One `generate_video` per storyboard shot. Never text-to-video for a recurring ch
 - Apply the locked sound format and spoken language from the sound checkpoint to every video prompt and its `generate_audio` flag.
 - In the video prompt, name how each still is used. Restate hair, wardrobe, age, and the locked visual style.
 - Optional continuity: previous shot as `reference_videos` on reference-to-video only.
-- Batches of 4; `concat_videos` last, alone.
+- Submit all ready clips in the same turn; there is no fixed batch size. `concat_videos` last, alone.
 
 ## Concat
 

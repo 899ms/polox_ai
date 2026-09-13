@@ -6,6 +6,7 @@ import { GenerationJob } from '../models/generationJob'
 import { createFalTask } from './falGenerate'
 import { generationConcurrency } from './generationConcurrency'
 import { isProviderStarted } from './generationJobs'
+import { createWavespeedTask } from './wavespeed'
 
 type GenerationJobDocument = StoredDocument<IGenerationJob>
 let dispatching: Promise<void> | undefined
@@ -32,7 +33,8 @@ async function failUnstartedJob(job: GenerationJobDocument, error: unknown) {
   return job
 }
 async function startProviderTask(job: GenerationJobDocument) {
-  if (job.provider && job.provider !== 'fal') return failUnstartedJob(job, new Error('This task belongs to a retired provider. Please generate again.'))
+  if (job.provider && job.provider !== 'fal' && job.provider !== 'wavespeed')
+    return failUnstartedJob(job, new Error('This task belongs to a retired provider. Please generate again.'))
   const original = asRecord(job.originalRequest)
   if (original?.source === 'agent' && original?.holdSlot === true) {
     if (job.state === 'queued' || job.state === 'waiting' || job.state === 'queuing') {
@@ -47,6 +49,14 @@ async function startProviderTask(job: GenerationJobDocument) {
   const requestBody = asRecord(job.requestBody) || {}
   // Ignore legacy text-compositing metadata on already persisted jobs.
   const { _textEdit, ...input } = job.input && typeof job.input === 'object' ? job.input : {}
+  if (job.provider === 'wavespeed') {
+    const task = await createWavespeedTask(job.model, input)
+    job.providerTaskId = task.requestId
+    job.state = 'waiting'
+    job.lastSyncAt = new Date()
+    await job.save()
+    return job
+  }
   {
     const falModel = String(requestBody.model || job.model || '').trim()
     const falTask = await createFalTask(falModel, input)
@@ -61,7 +71,6 @@ async function startProviderTask(job: GenerationJobDocument) {
     await job.save()
     return job
   }
-
 }
 async function dispatchOnce() {
   const limit = await generationConcurrency()

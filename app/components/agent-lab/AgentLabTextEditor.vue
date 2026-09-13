@@ -58,9 +58,7 @@ function submit() {
         </button>
       </div>
       <div v-if="activeEdit" class="grid min-w-0 overflow-hidden rounded-xl border border-border lg:grid-cols-2">
-        <div class="flex min-w-0 items-center justify-center bg-muted/20 p-4">
-          <img :key="activeEdit.imageUrl" :src="activeEdit.imageUrl" alt="Original image" class="max-h-[480px] max-w-full object-contain" @load="failedImages[activeEdit.imageUrl] = false" @error="failedImages[activeEdit.imageUrl] = true">
-        </div>
+        <ToolsImageTextCanvas :key="activeEdit.imageUrl" :src="activeEdit.imageUrl" @load="failedImages[activeEdit.imageUrl] = false" @error="failedImages[activeEdit.imageUrl] = true" />
         <div v-if="activeEdit.detectionError" role="status" class="border-t border-border p-3 text-sm text-muted-foreground lg:border-t-0 lg:border-l">
           {{ activeEdit.detectionError }}
         </div>

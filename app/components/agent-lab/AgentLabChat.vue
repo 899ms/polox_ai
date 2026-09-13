@@ -1,10 +1,15 @@
-import type { GenerationJobPublic } from '~~/shared/types/generation'
-import { isMediaVideoUrl } from '~~/shared/utils/seedance25'
 <script setup lang="ts">
 import type { AiModelConfig } from '~~/shared/types/aiModel'
+import type { GenerationJobPublic } from '~~/shared/types/generation'
+import type { ImageAnnotationReference } from '~~/shared/utils/imageAnnotations'
+import type { SketchElement } from '~~/shared/utils/sketchToImage'
 import type { AgentChatMessage, AgentConfirmPolicy, AgentImage, AgentListItem, AgentQuality, AgentStatus, ChoiceAnswer, ConfirmationPayload, PendingAttachment } from '~/composables/useAgentLab'
 import { ArrowUp, ChevronDown, Paperclip, Plus, Square, X } from 'lucide-vue-next'
+import { normalizeComposerSelection } from '~~/shared/utils/agentComposerSelection'
 import { AGENT_MODELS, agentModelLogo, modelMention, readModelMentions, stripModelMentions } from '~~/shared/utils/agentModels'
+import { findComposerCommand, PUBLIC_AGENT_SKILLS, readSkillCommands, searchAgentSkills, stripSkillCommands } from '~~/shared/utils/agentSkills'
+import { isMediaVideoUrl } from '~~/shared/utils/seedance25'
+import { SKETCH_TO_IMAGE_TOOL } from '~~/shared/utils/sketchToImage'
 import { agentComposerPlaceholder } from '~/utils/agentComposerPlaceholder'
 import { confirmationWorking } from '~/utils/agentConfirmationState'
 import { messageMedia } from '~/utils/agentMessageMedia'
@@ -14,7 +19,11 @@ const props = withDefaults(defineProps<{
   messages: AgentChatMessage[]
   sessionId?: string
   images: AgentImage[]
+  projectImages?: AgentImage[]
   projectJobs?: GenerationJobPublic[]
+  uploadAnnotationImage?: (file: File) => Promise<ImageAnnotationReference>
+  saveSketch?: (file: File) => Promise<boolean>
+  sketchInProjectOnly?: boolean
   projectAssetsLoading?: boolean
   projectAssetsError?: string
   attachments: PendingAttachment[]
@@ -47,6 +56,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   send: [
   ]
+  openSketch: []
   stop: [
   ]
   browseAssets: [
@@ -82,22 +92,45 @@ const emit = defineEmits<{
 const draft = defineModel<string>('draft', { default: '' })
 const qualityPreference = defineModel<AgentQuality>('qualityPreference', { default: 'hobby' })
 const confirmPolicy = defineModel<AgentConfirmPolicy>('confirmPolicy', { default: 'always' })
+// Also normalize restored drafts and selections pasted into the composer.
+watch(draft, (text) => {
+  const normalized = normalizeComposerSelection(text)
+  if (normalized !== text)
+    draft.value = normalized
+}, { immediate: true, flush: 'sync' })
+
+const selectedSkills = computed(() => readSkillCommands(draft.value))
+const selectedSkillCommands = computed(() => selectedSkills.value.map(skill => `/${skill.id}`))
 const selectedModels = computed(() => readModelMentions(draft.value).map(id => AGENT_MODELS.find(model => model.id === id)!))
-const composerText = computed({
-  get: () => stripModelMentions(draft.value),
-  set: (text: string) => { draft.value = [...selectedModels.value.map(modelMention), text].join(' ') },
+const sketchSelected = computed(() => selectedModels.value.some(model => model.id === SKETCH_TO_IMAGE_TOOL) || selectedSkills.value.some(skill => skill.id === SKETCH_TO_IMAGE_TOOL))
+const sketchVisible = computed(() => sketchSelected.value && !props.sketchInProjectOnly)
+const sketchDrafts = useState<Record<string, SketchElement[]>>('agent-sketch-drafts', () => ({}))
+const sketchKey = computed(() => props.activeAgentId || 'local')
+const sketchElements = computed({
+  get: () => sketchDrafts.value[sketchKey.value] || [],
+  set: (value: SketchElement[]) => { sketchDrafts.value[sketchKey.value] = value },
 })
-const mention = ref<{
-  start: number
-  end: number
-  query: string
-} | null>(null)
-watch(() => Boolean(mention.value), (open) => {
-  if (open)
+const sketchCanvas = useTemplateRef('sketchCanvas')
+const sketchEditor = useTemplateRef('sketchEditor')
+const sketchHasText = ref(false)
+const submittingSketch = ref(false)
+const sketchError = ref('')
+watch(sketchKey, () => {
+  sketchHasText.value = false
+  sketchError.value = ''
+})
+const composerText = computed({
+  get: () => stripSkillCommands(stripModelMentions(draft.value)),
+  set: (text: string) => { draft.value = [...selectedModels.value.map(modelMention), ...selectedSkillCommands.value, text].join(' ') },
+})
+const mention = ref<ReturnType<typeof findComposerCommand>>(null)
+const skillMatches = computed(() => searchAgentSkills(mention.value?.query || '').filter(skill => !selectedSkills.value.some(selected => selected.id === skill.id)))
+watch(() => mention.value?.trigger, (trigger) => {
+  if (trigger === '@')
     emit('browseAssets')
 })
 const mentionIndex = ref(0)
-const mentionColumn = ref<'models' | 'assets'>('models')
+const mentionColumn = ref<'models' | 'assets' | 'skills'>('models')
 const mentionStyle = ref<Record<string, string>>({})
 const modelListId = `model-list-${useId()}`
 let composerElement: HTMLTextAreaElement | null = null
@@ -106,7 +139,7 @@ const modelMatches = computed(() => {
   const query = (mention.value?.query || '').toLowerCase().trim()
   const taskQuery = ['image-to-image', 'reference-to-video'].includes(query) ? query.replaceAll('-', ' ') : null
   const terms = query.split(/\s+/).filter(Boolean)
-  return AGENT_MODELS.filter(model => !selectedModels.value.some(selected => selected.id === model.id)
+  return AGENT_MODELS.filter(model => !PUBLIC_AGENT_SKILLS.some(skill => skill.id === model.id) && !selectedModels.value.some(selected => selected.id === model.id)
     && (taskQuery
       ? model.task.toLowerCase() === taskQuery
       : terms.every(term => `${model.name} ${model.task} ${model.id}`.toLowerCase().includes(term))))
@@ -124,7 +157,7 @@ const projectAssets = computed(() => {
         result.set(url, { id: `${job.taskId}:${index}`, url, name: job.layers?.[index]?.name || String(job.input.asset_name || job.prompt || job.model).slice(0, 100), video: job.category === 'Video' || isMediaVideoUrl(url) })
     }
   }
-  for (const image of props.images) {
+  for (const image of [...(props.projectImages || []), ...props.images]) {
     if (image.url && !result.has(image.url))
       result.set(image.url, { id: image.id, url: image.url, name: image.name || image.prompt.slice(0, 100) || 'Untitled asset', video: image.kind === 'video' || isMediaVideoUrl(image.url) })
   }
@@ -134,7 +167,7 @@ const assetMatches = computed(() => {
   const terms = (mention.value?.query || '').toLowerCase().trim().split(/\s+/).filter(Boolean)
   return projectAssets.value.filter(asset => terms.every(term => asset.name.toLowerCase().includes(term)))
 })
-const mentionCount = computed(() => mentionColumn.value === 'models' ? modelMatches.value.length : assetMatches.value.length)
+const mentionCount = computed(() => mentionColumn.value === 'skills' ? skillMatches.value.length : mentionColumn.value === 'models' ? modelMatches.value.length : assetMatches.value.length)
 const activeMentionId = computed(() => mention.value && mentionCount.value ? `${modelListId}-${mentionColumn.value}-${mentionIndex.value}` : undefined)
 watch(mentionCount, (count) => { mentionIndex.value = Math.max(0, Math.min(mentionIndex.value, count - 1)) })
 function updateMention(event: Event) {
@@ -149,13 +182,19 @@ function updateMention(event: Event) {
     ...(above ? { bottom: `${window.innerHeight - bounds.top + 8}px` } : { top: `${bounds.bottom + 8}px` }),
   }
   const end = input.selectionStart || 0
-  const before = input.value.slice(0, end)
-  const match = /(?:^|\s)@([^@\n]*)$/.exec(before)
-  mention.value = match ? { start: end - match[1]!.length - 1, end, query: match[1]! } : null
+  mention.value = findComposerCommand(input.value, end)
+  if (mention.value?.trigger === '/')
+    mentionColumn.value = 'skills'
+  else if (mentionColumn.value === 'skills')
+    mentionColumn.value = 'models'
   mentionIndex.value = 0
 }
 function removeModel(id: string) {
-  draft.value = [...selectedModels.value.filter(model => model.id !== id).map(modelMention), composerText.value].join(' ')
+  draft.value = [...selectedModels.value.filter(model => model.id !== id).map(modelMention), ...selectedSkillCommands.value, composerText.value].join(' ')
+}
+
+function removeSkill(id: string) {
+  draft.value = [...selectedModels.value.map(modelMention), ...selectedSkills.value.filter(skill => skill.id !== id).map(skill => `/${skill.id}`), composerText.value].join(' ')
 }
 watch(() => props.activeAgentId, () => { mention.value = null })
 watch(draft, (text) => {
@@ -282,11 +321,31 @@ watch(() => [
   }
   void scrollToBottomSoon(userSent)
 }, { flush: 'post' })
+async function revealSketchEditor() {
+  pinnedToBottom.value = false
+  await nextTick()
+  const node = scroller.value
+  const editor = sketchEditor.value?.$el as HTMLElement | undefined
+  if (node && editor)
+    node.scrollTop += editor.getBoundingClientRect().top - node.getBoundingClientRect().top - 16
+}
+
+watch(sketchVisible, (visible) => {
+  if (visible)
+    void revealSketchEditor()
+  else
+    void scrollToBottomSoon(true)
+})
+
 useResizeObserver(transcript, () => {
-  if (pinnedToBottom.value)
+  if (pinnedToBottom.value && !sketchVisible.value)
     scrollToBottom()
 })
 onMounted(() => {
+  if (sketchVisible.value) {
+    void revealSketchEditor()
+    return
+  }
   pinnedToBottom.value = true
   void scrollToBottomSoon(true)
 })
@@ -299,7 +358,9 @@ watch(() => props.activeAgentId, (id, previous) => {
 const hasReadyAttachment = computed(() => props.attachments.some(item => item.status === 'ready' && item.url))
 const hasFailedAttachment = computed(() => props.attachments.some(item => item.status === 'fail'))
 const hasGeneratingMedia = computed(() => props.images.some(item => item.status === 'generating'))
-const composerLocked = computed(() => props.pending
+const composerLocked = computed(() =>
+  submittingSketch.value
+  || props.pending
   || props.status === 'generating'
   || props.status === 'queued'
   || (props.confirmationOpen)
@@ -315,13 +376,31 @@ const canSend = computed(() => {
     && !composerLocked.value
     && !props.attaching
     && !hasFailedAttachment.value
+    && (!sketchVisible.value || Boolean(sketchElements.value.length || sketchHasText.value))
 })
+async function closeSketch() {
+  if (composerLocked.value)
+    return
+  await sketchCanvas.value?.saveDraft()
+  removeModel(SKETCH_TO_IMAGE_TOOL)
+  removeSkill(SKETCH_TO_IMAGE_TOOL)
+  sketchHasText.value = false
+  sketchError.value = ''
+  await nextTick()
+  const input = composerInput.value?.$el as HTMLTextAreaElement | undefined
+  input?.focus({ preventScroll: true })
+}
+
 async function mentionModel(modelId: string) {
   const model = AGENT_MODELS.find(item => item.id === modelId)
   if (!model || composerLocked.value)
     return
-  if (!selectedModels.value.some(item => item.id === model.id))
-    draft.value = [...selectedModels.value.map(modelMention), modelMention(model), composerText.value].join(' ')
+  const skill = PUBLIC_AGENT_SKILLS.find(item => item.id === modelId)
+  if (skill) {
+    await mentionSkill(skill.id)
+    return
+  }
+  draft.value = [modelMention(model), composerText.value].join(' ')
   qualityPreference.value = 'custom'
   mention.value = null
   await nextTick()
@@ -341,7 +420,32 @@ async function mentionTask(task: string) {
   input.setSelectionRange(input.value.length, input.value.length)
   input.dispatchEvent(new Event('input', { bubbles: true }))
 }
-defineExpose({ mentionModel, mentionTask })
+
+async function mentionSkill(skillId: string) {
+  const skill = PUBLIC_AGENT_SKILLS.find(item => item.id === skillId)
+  if (!skill || composerLocked.value)
+    return
+  draft.value = [`/${skill.id}`, composerText.value].join(' ')
+  mention.value = null
+  await nextTick()
+  const input = composerInput.value?.$el as HTMLTextAreaElement | undefined
+  input?.focus({ preventScroll: true })
+}
+
+defineExpose({ mentionModel, mentionTask, mentionSkill })
+
+async function selectSkill(skill: ReturnType<typeof searchAgentSkills>[number]) {
+  if (!mention.value || composerLocked.value)
+    return
+  const { start, end } = mention.value
+  const text = `${composerText.value.slice(0, start)}${composerText.value.slice(end)}`
+  draft.value = [`/${skill.id}`, text].join(' ')
+  mention.value = null
+  await nextTick()
+  composerElement?.focus({ preventScroll: true })
+  composerElement?.setSelectionRange(start, start)
+}
+
 async function selectAsset(asset: typeof projectAssets.value[number]) {
   if (!mention.value || composerLocked.value)
     return
@@ -358,7 +462,7 @@ async function selectModel(model: AiModelConfig) {
     return
   const { start, end } = mention.value
   const text = `${composerText.value.slice(0, start)}${composerText.value.slice(end)}`
-  draft.value = [...selectedModels.value.map(modelMention), modelMention(model), text].join(' ')
+  draft.value = [modelMention(model), text].join(' ')
   qualityPreference.value = 'custom'
   mention.value = null
   await nextTick()
@@ -438,6 +542,26 @@ function statusInlineFor(message: AgentChatMessage) {
 }
 function layerSourceImages(message: AgentChatMessage) {
   const index = props.messages.findIndex(item => item.id === message.id)
+  if (message.choice?.questions.some(question => question.id === 'image_edit_method')) {
+    const previous = props.messages.slice(0, index).reverse()
+    const request = previous.find(item => item.role === 'user')
+    const stills = (item: AgentChatMessage) => messageMedia(item, props.images)
+      .filter(image => image.status === 'success' && image.url && image.kind !== 'video' && !isMediaVideoUrl(image.url))
+      .map(image => ({ id: image.id, url: image.url! }))
+    if (request) {
+      const attached = stills(request)
+      if (attached.length || request.imageIds?.length)
+        return attached
+    }
+    // Follow-up edits without attachments use the nearest image-bearing message,
+    // never a gallery of all images from earlier requests.
+    for (const item of previous) {
+      const sources = stills(item)
+      if (sources.length)
+        return sources
+    }
+    return []
+  }
   for (const item of props.messages.slice(0, index).reverse()) {
     if (item.role !== 'user')
       continue
@@ -447,6 +571,7 @@ function layerSourceImages(message: AgentChatMessage) {
   }
   return []
 }
+
 function thumbsFor(message: AgentChatMessage & {
   media?: AgentImage[]
 }) {
@@ -487,7 +612,7 @@ function onDraftKeydown(event: KeyboardEvent) {
       mention.value = null
       return
     }
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    if (mentionColumn.value !== 'skills' && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
       event.preventDefault()
       mentionColumn.value = event.key === 'ArrowLeft' ? 'models' : 'assets'
       mentionIndex.value = 0
@@ -502,6 +627,12 @@ function onDraftKeydown(event: KeyboardEvent) {
       return
     }
     if (event.key === 'Enter' || event.key === 'Tab') {
+      const skill = mentionColumn.value === 'skills' ? skillMatches.value[mentionIndex.value] : undefined
+      if (skill) {
+        event.preventDefault()
+        void selectSkill(skill)
+        return
+      }
       const asset = mentionColumn.value === 'assets' ? assetMatches.value[mentionIndex.value] : undefined
       if (asset) {
         event.preventDefault()
@@ -524,15 +655,44 @@ function onDraftKeydown(event: KeyboardEvent) {
     return
   event.preventDefault()
   if (canSend.value)
-    emit('send')
+    void submitMessage()
 }
+async function submitMessage() {
+  if (!canSend.value)
+    return
+  if (sketchSelected.value && props.sketchInProjectOnly) {
+    emit('openSketch')
+    return
+  }
+  if (!sketchSelected.value) {
+    emit('send')
+    return
+  }
+  const key = sketchKey.value
+  submittingSketch.value = true
+  sketchError.value = ''
+  try {
+    if (!sketchCanvas.value || !props.saveSketch)
+      throw new Error('Could not save your sketch. Please try again.')
+    const file = await sketchCanvas.value.exportFile()
+    if (await props.saveSketch(file))
+      delete sketchDrafts.value[key]
+  }
+  catch (error) {
+    sketchError.value = error instanceof Error ? error.message : 'Could not save your sketch. Please try again.'
+  }
+  finally {
+    submittingSketch.value = false
+  }
+}
+
 function onComposerSubmit() {
   if (canStop.value) {
     emit('stop')
     return
   }
   if (canSend.value)
-    emit('send')
+    void submitMessage()
 }
 function setConfirmPolicy(value: unknown) {
   if (prefsLocked.value)
@@ -591,7 +751,7 @@ function setActiveAgent(value: unknown) {
                 v-for="agent in agents"
                 :key="agent.id"
                 :value="agent.id"
-                class="min-w-0"
+                class="min-w-0 [&>span:first-child]:text-primary"
                 :disabled="!canSwitchAgent && agent.id !== activeAgentId"
               >
                 <span class="flex min-w-0 flex-1 items-center gap-2">
@@ -664,6 +824,9 @@ function setActiveAgent(value: unknown) {
               :state="message.choiceState"
               :answers="message.choiceAnswers"
               :source-images="layerSourceImages(message)"
+              :reference-images="projectAssets.filter(asset => !asset.video)"
+              :upload-image="uploadAnnotationImage"
+              @browse-assets="emit('browseAssets')"
               :pending="pending && !choiceOpen"
               @submit="emit('submitChoice', $event)"
               @skip="emit('skipChoice')"
@@ -679,6 +842,42 @@ function setActiveAgent(value: unknown) {
             </p>
           </template>
         </AgentLabMessage>
+
+        <Card v-if="sketchVisible" ref="sketchEditor" class="relative w-full min-w-0 gap-4 rounded-2xl border-blue-500/70 py-4 shadow-none" role="region" aria-label="Sketch editor">
+          <AgentLabCardBorder tone="attention" />
+          <CardHeader class="px-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 space-y-1.5">
+                <CardTitle class="text-sm">
+                  Sketch to Image
+                </CardTitle>
+                <CardDescription>Draw your idea, then save it to the project. Next, choose references and confirm the intended image to generate.</CardDescription>
+              </div>
+              <Button type="button" variant="ghost" size="icon" class="size-7 shrink-0" :disabled="composerLocked" aria-label="Close sketch editor" @click="closeSketch">
+                <X class="size-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <ToolsSketchCanvas
+            :key="sketchKey"
+            ref="sketchCanvas"
+            v-model="sketchElements"
+            :disabled="composerLocked"
+            @editing="sketchHasText = $event"
+          />
+          <p v-if="sketchError" class="px-4 text-sm text-destructive" role="alert">
+            {{ sketchError }}
+          </p>
+          <CardFooter class="justify-end gap-2 border-t px-4 pt-3">
+            <Button type="button" variant="outline" size="sm" :disabled="composerLocked" @click="closeSketch">
+              Cancel
+            </Button>
+            <Button type="button" size="sm" :disabled="!canSend" @click="submitMessage">
+              <Spinner v-if="submittingSketch" />
+              {{ submittingSketch ? 'Saving…' : 'Save sketch' }}
+            </Button>
+          </CardFooter>
+        </Card>
 
         <p
           v-if="statusLabel && !statusInlineVisible"
@@ -758,15 +957,35 @@ function setActiveAgent(value: unknown) {
             v-if="mention && !composerLocked"
             :id="modelListId"
             role="listbox"
-            aria-label="Choose a model or project asset"
+            :aria-label="mention.trigger === '/' ? 'Choose a skill' : 'Choose a model or project asset'"
             class="fixed z-[100] flex flex-col overflow-hidden rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-lg"
             :style="mentionStyle"
             @mousedown.prevent
           >
-            <p class="hidden px-3 py-2 text-xs text-muted-foreground md:block">
+            <p v-if="mention.trigger !== '/'" class="hidden px-3 py-2 text-xs text-muted-foreground md:block">
               ← → Switch columns · ↑ ↓ Navigate · Enter Select
             </p>
-            <div class="grid min-h-0 flex-1 grid-cols-2 divide-x divide-border">
+            <div v-if="mention.trigger === '/'" role="group" aria-label="Skills" class="min-h-0 overflow-y-auto overscroll-contain">
+              <p class="px-3 py-2 text-xs font-semibold">
+                Skills
+              </p>
+              <button
+                v-for="(skill, index) in skillMatches"
+                :id="`${modelListId}-skills-${index}`"
+                :key="skill.id"
+                type="button" role="option" :aria-selected="index === mentionIndex"
+                class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                :class="index === mentionIndex ? 'bg-accent text-accent-foreground' : ''"
+                @click="selectSkill(skill)"
+              >
+                <Icon :name="skill.icon" class="size-6 shrink-0" />
+                <span class="min-w-0"><span class="block text-sm font-medium">{{ skill.name }}</span><span class="block text-xs text-muted-foreground">{{ skill.description }}</span></span>
+              </button>
+              <p v-if="!skillMatches.length" class="px-3 py-4 text-sm text-muted-foreground" role="status">
+                No matching skills
+              </p>
+            </div>
+            <div v-else class="grid min-h-0 flex-1 grid-cols-2 divide-x divide-border">
               <div role="group" aria-label="Models" class="min-w-0 overflow-y-auto overscroll-contain">
                 <p class="sticky top-0 z-10 bg-popover px-3 py-2 text-xs font-semibold">
                   Models
@@ -818,7 +1037,8 @@ function setActiveAgent(value: unknown) {
             </div>
           </div>
         </Teleport>
-        <div v-if="selectedModels.length" class="flex w-full flex-wrap gap-1.5 px-3 pt-3">
+        <div v-if="selectedModels.length || selectedSkills.length" class="flex w-full flex-wrap gap-1.5 px-3 pt-3">
+          <AgentLabSkillBadge v-for="skill in selectedSkills" :key="skill.id" :skill="skill" removable :disabled="composerLocked" @remove="removeSkill(skill.id)" />
           <AgentLabModelBadge v-for="model in selectedModels" :key="model.id" :model="model" removable :disabled="composerLocked" @remove="removeModel(model.id)" />
         </div>
         <InputGroupTextarea
@@ -829,7 +1049,7 @@ function setActiveAgent(value: unknown) {
           :class="compactComposer
             ? 'max-md:max-h-10 max-md:min-h-10 max-md:py-2 md:max-h-[min(40vh,20rem)] md:min-h-[88px]'
             : 'max-h-[min(40vh,20rem)] min-h-[88px]'"
-          :placeholder="agentComposerPlaceholder(selectedModels)"
+          :placeholder="selectedSkills.some(skill => skill.id === 'product-hunt-gallery') ? 'Enter your website URL…' : selectedSkills.length ? 'What do you want to create next?' : sketchVisible ? 'Describe how you want your sketch to look (optional)…' : agentComposerPlaceholder(selectedModels)"
           aria-label="Message to agent"
           :aria-expanded="Boolean(mention)"
           :aria-controls="mention ? modelListId : undefined"
@@ -947,8 +1167,9 @@ function setActiveAgent(value: unknown) {
               :disabled="!canSend"
               aria-keyshortcuts="Shift+Enter"
             >
-              <ArrowUp data-icon="inline-start" />
-              Send
+              <Spinner v-if="submittingSketch" class="size-4" />
+              <ArrowUp v-else data-icon="inline-start" />
+              {{ submittingSketch ? 'Saving…' : sketchSelected && sketchInProjectOnly ? 'Open in project' : sketchVisible ? 'Save sketch' : 'Send' }}
             </InputGroupButton>
           </div>
         </InputGroupAddon>

@@ -1,3 +1,4 @@
+import type { ImageAnnotationEdit } from '~~/shared/utils/imageAnnotations'
 import { useServiceConnection } from './useServiceConnection'
 import type { AgentConfirmPolicy, AgentQuality } from '~~/shared/types/agentPreferences'
 import type { GenerationJobPublic } from '~~/shared/types/generation'
@@ -8,6 +9,7 @@ import { isInternalAgentChatText, publicAgentChatText } from '~~/shared/utils/ag
 import { isAgentTransientMessage } from '~~/shared/utils/agentHistoryVisibility'
 import { completedLayerResults } from '~~/shared/utils/agentLayerResults'
 import { agentRecoveryNotice, isAgentDisconnectError as isDisconnectError, recoverAgentTranscript } from '~~/shared/utils/agentRecovery'
+import { readErrorMessage } from '~~/shared/utils/apiError'
 import { gptImage2ComboError } from '~~/shared/utils/gptImage2'
 import { isMediaVideoUrl } from '~~/shared/utils/seedance25'
 import { confirmationMedia, reconcileConfirmationStates } from '~/utils/agentConfirmationState'
@@ -99,6 +101,8 @@ export interface ChoicePayload {
   questions: ChoiceQuestion[]
 }
 export interface ChoiceAnswer {
+  referenceImages?: { url: string, name: string }[]
+  annotationEdit?: ImageAnnotationEdit
   imageSelections?: {
     imageUrl: string
     regions: number[][]
@@ -163,6 +167,7 @@ interface StoredAgent {
   pending?: boolean
   busy?: boolean
   queueNotice?: string
+  createdAt?: number
   updatedAt?: number
 }
 interface StoredLab {
@@ -180,7 +185,6 @@ let composerDraftMemory = ''
 const MAX_CHAT_MESSAGES = 60
 const MAX_CHAT_IMAGES = 48
 const MAX_MESSAGE_CHARS = 8000
-const MAX_AGENTS = 20
 const MAX_AGENT_TITLE = 48
 const DEFAULT_AGENT_TITLE = 'New agent'
 function clipMessageContent(value: string) {
@@ -436,7 +440,8 @@ function createAgentLab(options?: {
   const waitingForUserConfirm = computed(() => Boolean(confirmation.value) && confirmation.value?.approvedBy !== 'agent')
   const waitingForUserChoice = computed(() => Boolean(choice.value))
   const waitingForUser = computed(() => waitingForUserConfirm.value || waitingForUserChoice.value)
-  const attaching = computed(() => attachments.value.some(item => item.status === 'uploading'))
+  const uploadingSketch = ref(false)
+  const attaching = computed(() => uploadingSketch.value || attachments.value.some(item => item.status === 'uploading'))
   const readyAttachments = computed(() => attachments.value.filter(item => item.status === 'ready' && item.url))
   const canSwitchAgent = computed(() => {
     if (attaching.value)
@@ -445,8 +450,8 @@ function createAgentLab(options?: {
       return false
     return true
   })
-  const canCreateAgent = computed(() => canSwitchAgent.value && storedAgents.value.length < MAX_AGENTS)
-  const agents = computed<AgentListItem[]>(() => storedAgents.value.map((agent) => {
+  const canCreateAgent = computed(() => canSwitchAgent.value)
+  const agents = computed<AgentListItem[]>(() => [...storedAgents.value].sort((a, b) => (b.createdAt || b.updatedAt || 0) - (a.createdAt || a.updatedAt || 0)).map((agent) => {
     const active = agent.id === activeAgentId.value
     const title = active ? agentTitle.value : (agent.title || DEFAULT_AGENT_TITLE)
     const busy = active
@@ -514,6 +519,7 @@ function createAgentLab(options?: {
       pending: pending.value,
       busy: pending.value || status.value !== 'idle',
       queueNotice: queueNotice.value,
+      createdAt: storedAgents.value.find(agent => agent.id === activeAgentId.value)?.createdAt || Date.now(),
       updatedAt: Date.now(),
     }
   }
@@ -554,6 +560,7 @@ function createAgentLab(options?: {
       pending: false,
       busy: false,
       queueNotice: '',
+      createdAt: Date.now(),
       updatedAt: Date.now(),
     }
   }
@@ -791,14 +798,44 @@ function createAgentLab(options?: {
       choice: choice.value,
     } satisfies StoredLab
   }
+  function shrinkAgentsForStorage(keepFullCount: number) {
+    const sorted = [...storedAgents.value].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    const keepFull = new Set(sorted.slice(0, keepFullCount).map(a => a.id))
+    // Always keep the active agent full so the current UI state survives.
+    keepFull.add(activeAgentId.value)
+    storedAgents.value = storedAgents.value.map((agent) => {
+      if (keepFull.has(agent.id))
+        return agent
+      return {
+        id: agent.id,
+        title: agent.title,
+        titleSource: agent.titleSource,
+        sessionId: agent.sessionId,
+        status: 'idle' as AgentStatus,
+        pending: false,
+        busy: false,
+        queueNotice: '',
+        createdAt: agent.createdAt,
+        updatedAt: agent.updatedAt,
+        messages: [],
+        images: [],
+        confirmation: null,
+        choice: null,
+        draft: '',
+      }
+    })
+  }
+
   function writeStore() {
     if (!import.meta.client || !storageKey.value)
       return
     trimLab()
     try {
       localStorage.setItem(storageKey.value, JSON.stringify(labSnapshot()))
+      return
     }
     catch {
+      // First fallback: trim the active agent's history.
       messages.value = trimChatMessages(messages.value.slice(-24))
       images.value = images.value.slice(0, 12)
       storedAgents.value = storedAgents.value.map((agent) => {
@@ -810,15 +847,28 @@ function createAgentLab(options?: {
           images: (agent.images || []).slice(0, 12),
         }
       })
-      try {
-        localStorage.setItem(storageKey.value, JSON.stringify(labSnapshot()))
-      }
-      catch {
-        // Drop the snapshot rather than crashing the tab.
+    }
+    try {
+      localStorage.setItem(storageKey.value, JSON.stringify(labSnapshot()))
+      return
+    }
+    catch {
+      // Second fallback: drop full history for older agents, keep only metadata.
+      // They will be re-hydrated from the server when selected.
+      for (const keepCount of [10, 5, 2, 1]) {
+        shrinkAgentsForStorage(keepCount)
+        try {
+          localStorage.setItem(storageKey.value, JSON.stringify(labSnapshot()))
+          return
+        }
+        catch {
+          // continue with fewer agents
+        }
       }
     }
+    // Last resort: drop the snapshot rather than crashing the tab.
   }
-  async function persistChat() {
+  async function persistChat(required = false) {
     if (!import.meta.client || !sessionId.value)
       return
     if (!messages.value.length && !images.value.length)
@@ -848,7 +898,9 @@ function createAgentLab(options?: {
         },
       })
     }
-    catch {
+    catch (cause) {
+      if (required)
+        throw cause
       // Local chat still remains if archive fails.
     }
   }
@@ -863,6 +915,7 @@ function createAgentLab(options?: {
     if (saved.agents?.length) {
       storedAgents.value = saved.agents.map(agent => ({
         ...agent,
+        createdAt: agent.createdAt || agent.updatedAt || 0,
         messages: (agent.messages || []).map(item => ({
           ...item,
           streaming: false,
@@ -990,6 +1043,7 @@ function createAgentLab(options?: {
   function storedAgentFromChat(chat: {
     sessionId: string
     preview?: string
+    createdAt?: number
     updatedAt?: number
     messages?: Array<{
       id?: string
@@ -1063,6 +1117,7 @@ function createAgentLab(options?: {
       pending: false,
       busy: false,
       queueNotice: '',
+      createdAt: chat.createdAt || chat.updatedAt || 0,
       updatedAt: chat.updatedAt || Date.now(),
     }
   }
@@ -1082,6 +1137,7 @@ function createAgentLab(options?: {
       confirmation: current.confirmation || incoming.confirmation || null,
       choice: current.choice || incoming.choice || null,
       draft: current.draft || incoming.draft || '',
+      createdAt: current.createdAt || incoming.createdAt || current.updatedAt || incoming.updatedAt || 0,
       updatedAt: Math.max(current.updatedAt || 0, incoming.updatedAt || 0),
     }
   }
@@ -1098,7 +1154,7 @@ function createAgentLab(options?: {
     }
     const merged = [...byKey.values()]
     const nonempty = merged.filter(agent => !isEmptyStoredAgent(agent))
-    storedAgents.value = (nonempty.length ? nonempty : merged).slice(0, MAX_AGENTS)
+    storedAgents.value = nonempty.length ? nonempty : merged
     const active = storedAgents.value.find(agent => agent.id === activeAgentId.value && !isEmptyStoredAgent(agent))
       || storedAgents.value.find(agent => agent.sessionId === sessionId.value)
       || storedAgents.value[0]
@@ -1140,6 +1196,7 @@ function createAgentLab(options?: {
             content?: string
             imageIds?: string[]
           }>
+          createdAt?: number
           updatedAt?: number
         }>
       }
@@ -1178,6 +1235,7 @@ function createAgentLab(options?: {
             pending: false,
             busy: false,
             queueNotice: '',
+            createdAt: item.createdAt || item.updatedAt || 0,
             updatedAt: item.updatedAt || Date.now(),
           } satisfies StoredAgent
         })
@@ -1711,17 +1769,24 @@ function createAgentLab(options?: {
     }
     clearLabError()
     for (const item of unique) {
-      const imageId = crypto.randomUUID()
-      images.value.unshift({
-        id: imageId,
-        kind: 'upload',
-        status: 'success',
-        prompt: item.name || 'Canvas still',
-        aspectRatio: 'auto',
-        resolution: '',
-        url: item.url,
-        error: '',
-      })
+      // Media is project-scoped: look up the url across every agent, not just
+      // the active one, so attaching a canvas asset never duplicates its record.
+      const existing = images.value.find(image => image.url === item.url)
+        || storedAgents.value.flatMap(agent => agent.images || []).find(image => image.url === item.url)
+      const imageId = existing?.id || crypto.randomUUID()
+      const local = images.value.find(image => image.url === item.url)
+      if (!local) {
+        images.value.unshift({
+          id: imageId,
+          kind: 'upload',
+          status: 'success',
+          prompt: item.name || 'Canvas still',
+          aspectRatio: 'auto',
+          resolution: '',
+          url: item.url,
+          error: '',
+        })
+      }
       attachments.value = [...attachments.value, {
         id: crypto.randomUUID(),
         name: item.name || 'Canvas still',
@@ -1733,6 +1798,27 @@ function createAgentLab(options?: {
       }]
     }
   }
+  async function uploadAnnotationImage(file: File, requirePersist = false) {
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 10 * 1024 * 1024)
+      throw new Error('Upload a JPEG, PNG, WEBP, or GIF up to 10MB.')
+    const id = await ensureSession()
+    const body = new FormData()
+    body.append('file', file)
+    const response = await fetch(`${baseUrl}/v1/uploads?sessionId=${encodeURIComponent(id)}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: labHeaders(false, crypto.randomUUID()),
+      body,
+    })
+    const payload = await response.json() as { image?: AgentImage, error?: string }
+    if (!response.ok || !payload.image?.url)
+      throw new Error(payload.error || 'Upload failed')
+    const image = payload.image
+    images.value = [image, ...images.value.filter(item => item.id !== image.id)]
+    await persistChat(requirePersist)
+    return { url: image.url!, name: image.name || file.name.slice(0, 100) }
+  }
+
   async function attachFiles(fileList: File[]) {
     const accepted = fileList.filter((file) => {
       const type = file.type.toLowerCase()
@@ -1777,7 +1863,7 @@ function createAgentLab(options?: {
           error?: string
         }
         if (!response.ok || !payload.image?.url)
-          throw new Error(payload.error || 'Upload failed')
+          throw new Error(readErrorMessage(payload, 'Upload failed'))
         if (payload.sessionId)
           sessionId.value = payload.sessionId
         const current = attachments.value.find(item => item.id === local.id)
@@ -1802,9 +1888,40 @@ function createAgentLab(options?: {
       }
     }
   }
-  async function sendMessage(options?: {
-    newAgent?: boolean
-  }) {
+  async function sendMessage(options?: { newAgent?: boolean, sketchFile?: File }): Promise<boolean> {
+    if (options?.sketchFile) {
+      if (pending.value || waitingForUser.value || attaching.value || status.value === 'generating' || status.value === 'queued')
+        return false
+      if (attachments.value.length >= 9)
+        throw new Error('Remove an attachment to make room for your sketch (up to 9 images per message).')
+      const originAgent = activeAgentId.value
+      let sketchAttachmentId = ''
+      uploadingSketch.value = true
+      try {
+        const image = await uploadAnnotationImage(options.sketchFile, true)
+        if (originAgent !== activeAgentId.value)
+          throw new Error('The active agent changed. Return to your sketch and send again.')
+        attachUrls([image])
+        const sketch = attachments.value.find(item => item.url === image.url)
+        if (!sketch)
+          throw new Error('Could not attach your sketch. Please try again.')
+        sketchAttachmentId = sketch.id
+        attachments.value = [sketch, ...attachments.value.filter(item => item.id !== sketch.id)]
+      }
+      finally {
+        uploadingSketch.value = false
+      }
+      try {
+        const sent = await sendMessage({ ...options, sketchFile: undefined })
+        if (!sent)
+          removeAttachment(sketchAttachmentId)
+        return sent
+      }
+      catch (error) {
+        removeAttachment(sketchAttachmentId)
+        throw error
+      }
+    }
     const text = draft.value.trim()
     const ready = readyAttachments.value
     if (options?.newAgent) {
@@ -1812,7 +1929,7 @@ function createAgentLab(options?: {
         return false
       }
       if (!canCreateAgent.value) {
-        setLabError('Cannot create a new agent right now. Wait for the current turn to finish or check the agent limit.')
+        setLabError('Cannot create a new agent right now. Wait for the current turn to finish.')
         return false
       }
       // Move the submitted input into a fresh agent without carrying its history.
@@ -2814,6 +2931,7 @@ function createAgentLab(options?: {
     stopAgent,
     stopping,
     attachFiles,
+    uploadAnnotationImage,
     attachUrls,
     removeAttachment,
     resolveConfirmation,

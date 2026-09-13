@@ -12,11 +12,13 @@ import type {
   UncertainField,
   VideoFamily,
 } from './types'
-import { withCustomChoiceOption } from '~~/shared/utils/agentChoices'
+import { standaloneImageEditQuestions, withCustomChoiceOption } from '~~/shared/utils/agentChoices'
 import { exportZipTool } from './exportZip'
 import { gptImage2ComboError, isGptImage2AspectRatio, isGptImage2Resolution } from './gptImage2'
 import { isSeedance2AspectRatio, isSeedance2Resolution } from './seedance2'
+import { SKETCH_QUESTIONS } from './sketchBrief'
 import { AGENT_VIDEO_DURATIONS, GPT_IMAGE_2_ASPECT_RATIOS, GPT_IMAGE_2_RESOLUTIONS, SEEDANCE_2_ASPECT_RATIOS, SEEDANCE_2_RESOLUTIONS, UNCERTAIN_FIELDS } from './types'
+import { inspectWebsiteTool } from './websiteInspection'
 
 export const GENERATE_IMAGE_TOOL = 'generate_image'
 export const REMOVE_BACKGROUND_TOOL = 'remove_background'
@@ -28,6 +30,7 @@ export const MAX_ASK_QUESTIONS = 6
 export const MAX_ASK_OPTIONS = 8
 
 export const openAiTools = [
+  inspectWebsiteTool,
   exportZipTool,
   {
     type: 'function',
@@ -46,21 +49,21 @@ export const openAiTools = [
           aspect_ratio: {
             type: 'string',
             enum: [...GPT_IMAGE_2_ASPECT_RATIOS],
-            description: 'Output aspect ratio. Use auto when editing unless the user asked for a specific crop.',
+            description: 'Output aspect ratio. Use auto when editing unless the user asked for a specific crop. Combination limits: auto only supports 1K; 1:1 cannot use 4K; 5:4, 4:5, 3:1, 1:3, 9:21 only support 1K.',
           },
           resolution: {
             type: 'string',
             enum: [...GPT_IMAGE_2_RESOLUTIONS],
-            description: 'Output resolution. The runtime overwrites this from the quality preference (Economy = 1K, High quality = 2K).',
+            description: 'Output resolution. The runtime overwrites this from the quality preference (Economy = 1K, High quality = 2K). Combination limits: auto -> 1K only; 1:1 -> no 4K; 5:4, 4:5, 3:1, 1:3, 9:21 -> 1K only.',
           },
           input_urls: {
             type: 'array',
-            description: 'Reference stills to edit. Public HTTP URLs, session image ids, or "latest". Empty or omitted means text-to-image. Up to 16.',
+            description: 'Reference stills to edit (JPEG, PNG, or WEBP). Public HTTP URLs, session image ids, or "latest". Empty or omitted means text-to-image. Up to 16.',
             items: { type: 'string' },
           },
           uncertain_fields: {
             type: 'array',
-            description: 'Hint which inferred fields the user may want to edit. When generation confirmation is "review when needed", a non-empty list pauses for a click; empty auto-approves. This does not start generation by itself.',
+            description: 'Hint which inferred fields the user may want to edit. When generation confirmation is "review when needed", a non-empty list pauses for a click; empty auto-approves. This does not start generation by itself. Do not mark preset-tool defaults (1K still, 480p video) or the always-adaptive image-to-video ratio as uncertain.',
             items: {
               type: 'string',
               enum: [...UNCERTAIN_FIELDS],
@@ -97,7 +100,7 @@ export const openAiTools = [
     type: 'function',
     function: {
       name: GENERATE_VIDEO_TOOL,
-      description: 'Generate one video. Use first_frame to animate ONE still (image-to-video). Use reference_images / reference_videos for reference-to-video: compose a new clip from several references, or edit an existing clip by putting it in reference_videos and describing the change in the prompt (optional reference_images to replace a person or object). Omit both only for text-to-video. Call once per video. The runtime picks the video family from the quality preference. A confirmation card is always recorded; generation may auto-approve from the user\'s generation confirmation.',
+      description: 'Generate one video. Use first_frame to animate ONE still (image-to-video). Use reference_images / reference_videos for reference-to-video: compose a new clip from several references, or edit an existing clip by putting it in reference_videos and describing the change in the prompt (optional reference_images to replace a person or object). If several stills are attached without a pointed first frame, prefer reference-to-video. Omit both only for text-to-video. Call once per video. The runtime picks the video family from the quality preference. A confirmation card is always recorded; generation may auto-approve from the user\'s generation confirmation.',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -146,7 +149,7 @@ export const openAiTools = [
           },
           uncertain_fields: {
             type: 'array',
-            description: 'Hint which inferred fields the user may want to edit. When generation confirmation is "review when needed", a non-empty list pauses for a click; empty auto-approves.',
+            description: 'Hint which inferred fields the user may want to edit. When generation confirmation is "review when needed", a non-empty list pauses for a click; empty auto-approves. Do not mark preset-tool defaults (1K still, 480p video) or the always-adaptive image-to-video ratio as uncertain.',
             items: {
               type: 'string',
               enum: [...UNCERTAIN_FIELDS],
@@ -161,7 +164,7 @@ export const openAiTools = [
     type: 'function',
     function: {
       name: CONCAT_VIDEO_TOOL,
-      description: 'Concatenate existing clips into one longer video with ffmpeg. Use after a storyboard of short Seedance clips. Pass the clip URLs or session video ids in story order. Do not mix with generate_video in the same turn. ',
+      description: 'Concatenate existing clips into one longer video with ffmpeg. Use after a storyboard of short Seedance clips. Pass the clip URLs or session video ids in story order. Do not mix with generate_video in the same turn. Free — no generation confirmation.',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -263,7 +266,7 @@ export function latestStill(images: AgentImage[]) {
 export function resolveSessionUrl(token: string, images: AgentImage[], label: string) {
   const value = token.trim()
   const latest = latestStill(images)
-  const useLatest = !value || /^(latest|last|newest)$/i.test(value)
+  const useLatest = !value || /^(?:latest|last|newest)$/i.test(value)
   if (useLatest) {
     if (!latest)
       throw new Error(`No still in this session for ${label}. Generate or upload an image first, or pass a public HTTP URL.`)
@@ -411,7 +414,7 @@ export function latestVideo(images: AgentImage[]) {
 export function resolveSessionVideo(token: string, images: AgentImage[], label: string) {
   const value = token.trim()
   const latest = latestVideo(images)
-  const useLatest = !value || /^(latest|last|newest)$/i.test(value)
+  const useLatest = !value || /^(?:latest|last|newest)$/i.test(value)
   if (useLatest) {
     if (!latest)
       throw new Error(`No video in this session for ${label}. Generate a clip first, or pass a public HTTP URL.`)
@@ -545,7 +548,7 @@ export function parseConcatVideoArgs(raw: string): ConcatVideoArgs {
   const tokens = asStringList(parsed.video_urls ?? parsed.urls, MAX_CONCAT_CLIPS, 'video_urls')
   if (tokens.length < 2)
     throw new Error('concat_videos needs at least two clips, in story order')
-  if (tokens.some(token => /^(latest|last|newest)$/i.test(token)))
+  if (tokens.some(token => /^(?:latest|last|newest)$/i.test(token)))
     throw new Error('concat_videos cannot use "latest"; pass each clip URL or session id in order')
 
   return { video_urls: tokens }
@@ -555,7 +558,7 @@ export function resolveConcatVideoUrls(args: ConcatVideoArgs, images: AgentImage
   return args.video_urls.map((token, index) => resolveSessionVideo(token, images, `video_urls[${index}]`).url)
 }
 
-const CUSTOM_OPTION_RE = /^(other|custom|其他|其它|自定义)\b/i
+const CUSTOM_OPTION_RE = /^(?:other|custom|其他|其它|自定义)\b/i
 
 function clipAsk(value: unknown, max: number) {
   return asString(value).slice(0, max)
@@ -591,7 +594,7 @@ function parseAskQuestion(raw: unknown, index: number, seen: Set<string>): Choic
   if (!raw || typeof raw !== 'object')
     return null
   const row = raw as Record<string, unknown>
-  const prompt = clipAsk(row.prompt ?? row.question ?? row.label, 280)
+  const prompt = clipAsk(row.prompt ?? row.question ?? row.label, row.id === 'sketch_prompt' ? 8000 : row.id === 'sketch_understanding' ? 4000 : 280)
   if (!prompt)
     return null
   const optionSeen = new Set<string>()
@@ -609,13 +612,25 @@ function parseAskQuestion(raw: unknown, index: number, seen: Set<string>): Choic
   const id = clipAsk(row.id, 64) || `q_${index + 1}`
   const unique = seen.has(id) ? `${id}_${index + 1}` : id
   seen.add(unique)
+  // Normalize Image Layer Splitter option ids: the model may emit 'draw'/'describe'
+  // instead of the canonical 'draw_boxes'/'describe_layers' that the UI and loop expect.
+  if (unique === 'layer_selection_method') {
+    for (const option of options) {
+      if (option.id === 'draw' || option.id === 'draw_box' || option.id === 'boxes' || option.id === 'draw-boxes')
+        option.id = 'draw_boxes'
+      else if (option.id === 'describe' || option.id === 'description' || option.id === 'describe-layers')
+        option.id = 'describe_layers'
+    }
+  }
   const title = clipAsk(row.title, 80)
   const recommendedRaw = clipAsk(row.recommended ?? row.recommended_id ?? row.recommendedId, 64)
   const recommendedId = options.some(item => item.id === recommendedRaw) ? recommendedRaw : undefined
   return {
     id: unique,
     prompt,
-    options: withCustomChoiceOption(options),
+    options: SKETCH_QUESTIONS.includes(id)
+      ? options.filter(option => (id === 'sketch_prompt' ? ['send', 'adjust', 'cancel'] : id === 'sketch_understanding' ? ['correct', 'adjust'] : ['yes', 'no']).includes(option.id)).map(option => ({ ...option, custom: option.id === 'adjust' }))
+      : withCustomChoiceOption(options),
     ...(title ? { title } : {}),
     ...(recommendedId ? { recommendedId } : {}),
   }
@@ -649,7 +664,7 @@ export function parseAskUserArgs(raw: string): AskUserArgs {
 
   return {
     prompt: clipAsk(parsed.prompt ?? parsed.intro, 400),
-    recommendation: clipAsk(parsed.recommendation ?? parsed.hint, 400),
-    questions,
+    recommendation: questions.find(question => question.id === 'image_edit_method')?.options.find(option => option.id === 'annotate')?.label ?? clipAsk(parsed.recommendation ?? parsed.hint, 400),
+    questions: standaloneImageEditQuestions(questions),
   }
 }

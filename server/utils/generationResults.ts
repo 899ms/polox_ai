@@ -60,7 +60,7 @@ function inputUrlSet(job: IGenerationJob) {
     ...httpJobUrls(input.first_frame_url),
     ...httpJobUrls(input.last_frame_url),
     ...httpJobUrls(input.input_urls),
-    ...['image_urls', 'video_urls', 'audio_urls', 'image_url', 'start_image_url', 'end_image_url'].flatMap(key => httpJobUrls(input[key])),
+    ...['images', 'image', 'last_image', 'video', 'reference_images', 'reference_videos', 'reference_audios', 'image_urls', 'video_urls', 'audio_urls', 'image_url', 'start_image_url', 'end_image_url'].flatMap(key => httpJobUrls(input[key])),
   ])
 }
 

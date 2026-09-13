@@ -49,11 +49,12 @@ test('provider receives full original, without private compositing metadata', as
     const context = vm.createContext({
         asRecord: value => value,
         isProviderStarted: () => false,
-        createFalTask: async (model, input) => { request = { model, input }; return { requestId: 'provider-id' }; },
+        createWavespeedTask: async (model, input) => { request = { model, input }; return { requestId: 'provider-id' }; },
     });
     loadFunction('../server/utils/generationQueue.ts', 'startProviderTask', context);
-    await context.startProviderTask({ provider: 'fal', model: 'gpt-image-2-image-to-image', input: { input_urls: [imageUrl], prompt: textEditPrompt(lines) }, save: async () => { } });
-    assert.deepEqual(request.input.input_urls, [imageUrl]);
+    await context.startProviderTask({ provider: 'wavespeed', model: 'gpt-image-2-5-sunburst-image-to-image', input: { images: [imageUrl], prompt: textEditPrompt(lines) }, save: async () => { } });
+    assert.equal(request.model, 'gpt-image-2-5-sunburst-image-to-image');
+    assert.deepEqual(request.input.images, [imageUrl]);
     assert.equal(request.input._textEdit, undefined);
 });
 test('archive saves the provider image unchanged without downloading the original', async () => {

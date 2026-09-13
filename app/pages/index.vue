@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { FrontierModelCard } from '@/constants/aiModels'
 import { AGENT_MODELS } from '~~/shared/utils/agentModels'
+import { PUBLIC_AGENT_SKILLS } from '~~/shared/utils/agentSkills'
 import HomeFrontierModels from '@/components/home/FrontierModels.vue'
 import HomeRecentProjects from '@/components/home/RecentProjects.vue'
 import HomeUsefulTools from '@/components/home/UsefulTools.vue'
@@ -18,8 +19,22 @@ async function selectAgentModel(modelId: string) {
   document.getElementById('generator')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
+async function selectAgentSkill(skillId: string) {
+  selectHomeAgent()
+  await nextTick()
+  await agentComposer.value?.mentionSkill(skillId)
+  document.getElementById('generator')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 onMounted(() => {
   selectHomeAgent()
+  watch(() => route.query.agentSkill, async (skillId) => {
+    if (typeof skillId !== 'string' || !PUBLIC_AGENT_SKILLS.some(skill => skill.id === skillId))
+      return
+    const { agentSkill: _agentSkill, ...query } = route.query
+    await navigateTo({ path: '/', query, hash: route.hash }, { replace: true })
+    await selectAgentSkill(skillId)
+  }, { immediate: true })
   watch(() => route.query.agentTask, async (task) => {
     if (task !== 'image-to-image' && task !== 'reference-to-video')
       return
@@ -44,16 +59,16 @@ function selectFrontierModel(card: FrontierModelCard) {
 }
 
 useSeoMeta({
-  title: `${publicConfig.brandName} | ${publicConfig.heroDescription}`,
+  title: `${publicConfig.brandName} | ${publicConfig.heroTitle} ${publicConfig.heroTagline}`,
   description: publicConfig.heroDescription,
-  ogTitle: `${publicConfig.brandName} | ${publicConfig.heroDescription}`,
+  ogTitle: `${publicConfig.brandName} | ${publicConfig.heroTitle} ${publicConfig.heroTagline}`,
   ogDescription: publicConfig.heroDescription,
 })
 </script>
 
 <template>
-  <div class="relative mx-auto flex w-full max-w-[1128px] flex-col gap-5 md:gap-6">
-    <div class="relative isolate">
+  <div class="relative isolate mx-auto flex w-full max-w-[1128px] flex-col gap-5 md:gap-6">
+    <div class="relative">
       <HomeHeroVideoBackground />
 
       <div class="mx-auto flex max-w-3xl flex-col items-center gap-3 text-center">
@@ -61,13 +76,13 @@ useSeoMeta({
           <span class="block">{{ publicConfig.heroTitle }}</span>
           <span class="block">{{ publicConfig.heroTagline }}</span>
         </h1>
-        <h2 class="max-w-[44rem] text-[0.95rem] font-normal leading-relaxed text-zinc-300 drop-shadow-[0_1px_12px_rgba(0,0,0,0.9)] md:text-lg">
+        <p class="max-w-2xl text-sm leading-relaxed text-balance text-white/80 drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] md:text-base">
           {{ publicConfig.heroDescription }}
-        </h2>
+        </p>
       </div>
     </div>
 
-    <div class="relative z-10 -mt-4 w-full pt-5 md:-mt-6 md:pt-6">
+    <div class="relative z-10 w-full pt-3 md:pt-4">
       <div id="generator" class="flex flex-col gap-5 overflow-hidden rounded-2xl border border-border/70 bg-card/35 p-4 shadow-none backdrop-blur-xl supports-backdrop-filter:bg-card/25 md:gap-6 md:p-5">
         <HomeAgentComposer ref="agentComposer" embedded compact new-agent-on-send class="w-full" />
       </div>
@@ -76,6 +91,7 @@ useSeoMeta({
     <HomeRecentProjects />
 
     <div class="flex flex-col gap-5 md:gap-6">
+      <HomeSkills @select="selectAgentSkill" />
       <HomeFrontierModels @select="selectFrontierModel" />
       <HomeUsefulTools />
     </div>

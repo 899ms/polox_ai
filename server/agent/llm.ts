@@ -1,8 +1,9 @@
 import type { ChatMessage, ToolCall } from './types'
-import { falReadableUrl } from '../utils/falFiles'
+import { readStoredMedia } from '../utils/localMedia'
+import { uploadWavespeedFile } from '../utils/wavespeed'
 import { agentEnv } from './env'
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const WAVESPEED_URL = 'https://llm.wavespeed.ai/v1/chat/completions'
 
 export interface StreamDelta {
   content?: string
@@ -16,7 +17,7 @@ export interface StreamDelta {
   finishReason?: string | null
 }
 
-interface OpenRouterChunk {
+interface WaveSpeedChunk {
   choices?: Array<{
     delta?: {
       content?: string | null
@@ -37,11 +38,41 @@ interface OpenRouterChunk {
 }
 
 async function providerMessages(messages: ChatMessage[]) {
-  return Promise.all(messages.map(async ({ historyId: _historyId, internal: _internal, ...message }) => {
-    if (!Array.isArray(message.content)) return message
+  const imageUrls = new Map<string, Promise<string>>()
+  const providerImageUrl = (source: string) => {
+    let pending = imageUrls.get(source)
+    if (!pending) {
+      pending = (async () => {
+        const local = await readStoredMedia(source, 200 * 1024 * 1024)
+        return local ? uploadWavespeedFile(local.bytes, local.mime, new URL(source).pathname.split('/').pop() || 'image.png') : source
+      })()
+      imageUrls.set(source, pending)
+    }
+    return pending
+  }
+  // Older sessions may contain synthetic results for uploads, which have no tool call.
+  const pendingCalls = new Set<string>()
+  const pairedMessages = messages.filter((message) => {
+    if (message.role === 'assistant') {
+      for (const call of message.tool_calls || [])
+        pendingCalls.add(call.id)
+    }
+    if (message.role === 'tool') {
+      if (!message.tool_call_id || !pendingCalls.delete(message.tool_call_id))
+        return false
+    }
+    return true
+  })
+  return Promise.all(pairedMessages.map(async ({ historyId: _historyId, internal: _internal, ...message }) => {
+    if (!Array.isArray(message.content))
+      return message
     const content = await Promise.all(message.content.map(async (part) => {
-      if (part.type !== 'image_url') return part
-      return { ...part, image_url: { ...part.image_url, url: await falReadableUrl(part.image_url.url) } }
+      if (part.type !== 'image_url')
+        return part
+      if (agentEnv.model === 'deepseek/deepseek-v4-flash')
+        throw new Error('DeepSeek V4 Flash does not support image input. Send a text-only message or choose a vision-capable model in Service connection.')
+      const url = await providerImageUrl(part.image_url.url)
+      return { ...part, image_url: { ...part.image_url, url } }
     }))
     return { ...message, content }
   }))
@@ -53,20 +84,17 @@ export async function completeText(options: {
   temperature?: number
   maxTokens?: number
 }) {
-  const response = await fetch(OPENROUTER_URL, {
+  const response = await fetch(WAVESPEED_URL, {
     method: 'POST',
     signal: options.signal,
     headers: {
-      'Authorization': `Bearer ${agentEnv.openRouterApiKey}`,
+      'Authorization': `Bearer ${agentEnv.wavespeedApiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://polox.ai',
-      'X-Title': 'PoloX Agent Lab',
     },
     body: JSON.stringify({
       model: agentEnv.model,
       temperature: options.temperature ?? 0.2,
       stream: false,
-      reasoning: { enabled: false },
       max_tokens: options.maxTokens ?? 32,
       messages: await providerMessages(options.messages),
     }),
@@ -74,7 +102,7 @@ export async function completeText(options: {
 
   if (!response.ok) {
     const text = await response.text().catch(() => '')
-    throw new Error(text || `OpenRouter request failed (${response.status})`)
+    throw new Error(text || `WaveSpeed request failed (${response.status})`)
   }
 
   const payload = await response.json() as {
@@ -94,19 +122,16 @@ export async function streamChat(options: {
   signal?: AbortSignal
   onDelta: (delta: StreamDelta) => void
 }) {
-  const response = await fetch(OPENROUTER_URL, {
+  const response = await fetch(WAVESPEED_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${agentEnv.openRouterApiKey}`,
+      'Authorization': `Bearer ${agentEnv.wavespeedApiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://polox.ai',
-      'X-Title': 'PoloX Agent Lab',
     },
     body: JSON.stringify({
       model: agentEnv.model,
       temperature: 0.4,
       stream: true,
-      reasoning: { enabled: false },
       messages: await providerMessages(options.messages),
       tools: options.tools,
       tool_choice: options.disableTools ? 'none' : options.requiredTool ? { type: 'function', function: { name: options.requiredTool } } : 'auto',
@@ -117,11 +142,11 @@ export async function streamChat(options: {
 
   if (!response.ok) {
     const text = await response.text().catch(() => '')
-    throw new Error(text || `OpenRouter request failed (${response.status})`)
+    throw new Error(text || `WaveSpeed request failed (${response.status})`)
   }
 
   if (!response.body)
-    throw new Error('OpenRouter returned an empty stream')
+    throw new Error('WaveSpeed returned an empty stream')
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -141,9 +166,9 @@ export async function streamChat(options: {
       const data = trimmed.slice(5).trim()
       if (!data || data === '[DONE]')
         continue
-      let chunk: OpenRouterChunk
+      let chunk: WaveSpeedChunk
       try {
-        chunk = JSON.parse(data) as OpenRouterChunk
+        chunk = JSON.parse(data) as WaveSpeedChunk
       }
       catch {
         continue

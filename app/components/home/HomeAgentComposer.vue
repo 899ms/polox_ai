@@ -4,7 +4,9 @@ import type { ConfirmationPayload } from '~/composables/useAgentLab'
 import { ChevronDown, Folder, FolderOpen, Plus } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { DEFAULT_PROJECT_NAME } from '~~/shared/types/project'
+import { readModelMentions } from '~~/shared/utils/agentModels'
 import { readErrorMessage } from '~~/shared/utils/apiError'
+import { SKETCH_TO_IMAGE_TOOL } from '~~/shared/utils/sketchToImage'
 
 const props = withDefaults(defineProps<{
   compact?: boolean
@@ -17,7 +19,48 @@ const props = withDefaults(defineProps<{
 })
 const { projects, selectedProjectId, createProject } = useProjects()
 const { enterSelectedProject, resolveTargetProjectId } = useAgentWorkspaceNav()
-const { sessionId: agentSessionId, messages, images, status, waitingForUserConfirm, waitingForUserChoice, pending, draft, attachments, attaching, error, sendMessage, stopAgent, stopping, attachFiles, attachUrls, removeAttachment, resolveConfirmation, resolveChoice, qualityPreference, confirmPolicy, agents, activeAgentId, canCreateAgent, canSwitchAgent, createAgent, selectAgent, queueNotice } = useAgentLab({ projectId: selectedProjectId })
+const { sessionId: agentSessionId, messages, images, allImages, status, waitingForUserConfirm, waitingForUserChoice, pending, draft, attachments, attaching, error, sendMessage, stopAgent, stopping, attachFiles, attachUrls, removeAttachment, resolveConfirmation, resolveChoice, qualityPreference, confirmPolicy, agents, activeAgentId, canCreateAgent, canSwitchAgent, createAgent, selectAgent, queueNotice, ensureHydrated } = useAgentLab({ projectId: selectedProjectId })
+const hasSketch = computed(() => readModelMentions(draft.value, true).includes(SKETCH_TO_IMAGE_TOOL))
+const openingSketch = ref(false)
+
+async function openSketchInProject() {
+  if (openingSketch.value || !hasSketch.value)
+    return
+  const sketchDraft = draft.value
+  const sketchAttachments = [...attachments.value]
+  const sketchImages = images.value.filter(image => sketchAttachments.some(attachment => attachment.imageId === image.id))
+  openingSketch.value = true
+  try {
+    const id = await resolveTargetProjectId()
+    await ensureHydrated()
+    if (!canCreateAgent.value)
+      throw new Error('Cannot open a new sketch agent yet. Wait for the current turn or upload to finish, then try again.')
+    // Keep uploaded references alive while createAgent clears the previous input.
+    attachments.value = []
+    createAgent()
+    draft.value = sketchDraft
+    attachments.value = sketchAttachments
+    images.value = sketchImages
+    qualityPreference.value = 'custom'
+    await navigateTo(`/projects/${encodeURIComponent(id)}?mode=agent`)
+  }
+  catch (error) {
+    draft.value = sketchDraft
+    attachments.value = sketchAttachments
+    toast.error(readErrorMessage(error, 'Could not open the sketch in your project. Please try again.'))
+  }
+  finally {
+    openingSketch.value = false
+  }
+}
+
+onMounted(() => {
+  watch(hasSketch, (selected) => {
+    if (selected)
+      void openSketchInProject()
+  }, { immediate: true })
+})
+
 const projectJobs = ref<GenerationJobPublic[]>([])
 const projectAssetsLoading = ref(false)
 const projectAssetsError = ref('')
@@ -70,6 +113,7 @@ watch([selectedProjectId], () => {
 onBeforeUnmount(() => projectJobsController?.abort())
 const chat = useTemplateRef('chat')
 defineExpose({
+  mentionSkill: (skillId: string) => chat.value?.mentionSkill(skillId),
   mentionModel: (modelId: string) => chat.value?.mentionModel(modelId),
   mentionTask: (task: string) => chat.value?.mentionTask(task),
 })
@@ -93,6 +137,10 @@ onMounted(() => {
   void resolveTargetProjectId()
 })
 async function onSend() {
+  if (hasSketch.value) {
+    await openSketchInProject()
+    return false
+  }
   await resolveTargetProjectId()
   await nextTick()
   const sent = await sendMessage({ newAgent: props.newAgentOnSend })
@@ -193,10 +241,12 @@ function onProjectChange(value: string | number) {
             :messages="newAgentOnSend ? [] : messages"
             :session-id="newAgentOnSend ? '' : agentSessionId"
             :images="newAgentOnSend ? [] : images"
+            :project-images="allImages"
             :project-jobs="projectJobs"
             :project-assets-loading="projectAssetsLoading"
             :project-assets-error="projectAssetsError"
             :attachments="attachments"
+            sketch-in-project-only
             :status="newAgentOnSend ? 'idle' : status"
             :pending="newAgentOnSend ? false : pending"
             :attaching="attaching"
@@ -215,6 +265,7 @@ function onProjectChange(value: string | number) {
             @browse-assets="loadProjectAssets"
 
             @send="onSend"
+            @open-sketch="openSketchInProject"
             @stop="stopAgent"
             @attach="attachFiles"
             @attach-asset="attachUrls"

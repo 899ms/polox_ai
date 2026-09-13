@@ -14,7 +14,7 @@ export function useToolAgent() {
     targetProjectId.value = projectId
     await lab.ensureHydrated()
     if (!lab.canCreateAgent.value)
-      throw new Error('Cannot create a new agent right now. Wait for the current turn to finish or check the agent limit.')
+      throw new Error('Cannot create a new agent right now. Wait for the current turn to finish.')
 
     lab.createAgent()
     lab.draft.value = request

@@ -7,7 +7,7 @@ import { readStoredMedia } from './localMedia'
 function storage() {
   const key = readServiceSettings().falKey
   if (!key)
-    throw createError({ statusCode: 503, statusMessage: 'Fal API key is not configured' })
+    throw createError({ statusCode: 503, statusMessage: 'Media generation is awaiting WaveSpeed migration' })
   return createFalClient({ credentials: key }).storage
 }
 export async function uploadFalFile(bytes: Uint8Array, mime: string, fileName = 'upload.bin') {

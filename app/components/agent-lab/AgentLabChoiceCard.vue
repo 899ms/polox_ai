@@ -1,28 +1,38 @@
 <script setup lang="ts">
+import type { ImageAnnotationPoint, ImageAnnotationReference } from '~~/shared/utils/imageAnnotations'
 import type { ImageLayerRegion } from '~~/shared/utils/imageLayerSplitter'
 import type { ChoiceAnswer, ChoicePayload, ChoiceQuestion } from '~/composables/useAgentLab'
-import { withCustomChoiceOption } from '~~/shared/utils/agentChoices'
+import { standaloneImageEditQuestions, withCustomChoiceOption } from '~~/shared/utils/agentChoices'
 
 const props = withDefaults(defineProps<{
   choice: ChoicePayload
   state?: 'pending' | 'answered' | 'skipped'
   answers?: ChoiceAnswer[]
+  readOnly?: boolean
   pending?: boolean
+  referenceImages?: ImageAnnotationReference[]
+  uploadImage?: (file: File) => Promise<ImageAnnotationReference>
   sourceImages?: { id: string, url: string }[]
 }>(), {
   pending: false,
+  readOnly: false,
 })
 
 const emit = defineEmits<{
   submit: [answers: ChoiceAnswer[]]
   skip: []
+  browseAssets: []
 }>()
 
-const questions = computed(() => props.choice.questions.map(question => ({
+const questions = computed(() => standaloneImageEditQuestions(props.choice.questions).map(question => ({
   ...question,
   options: withCustomChoiceOption(question.options),
 })))
 
+const recommendation = computed(() => {
+  const method = questions.value.find(question => question.id === 'image_edit_method')
+  return method ? method.options.find(option => option.id === 'annotate')?.label || '' : props.choice.recommendation
+})
 const isPending = computed(() => (props.state || 'pending') === 'pending')
 const selections = ref<Record<string, { optionId: string, text: string }>>({})
 const regionsByImage = ref<Record<string, ImageLayerRegion[]>>({})
@@ -35,6 +45,13 @@ const imageSelections = computed(() => (props.sourceImages || []).map(image => (
   imageUrl: image.url,
   regions: (regionsByImage.value[image.url] || []).map(box => [...box] as ImageLayerRegion),
 })))
+const annotationPointsByImage = ref<Record<string, ImageAnnotationPoint[]>>({})
+const annotationPoints = computed({
+  get: () => annotationPointsByImage.value[sourceUrl.value] || [],
+  set: (points: ImageAnnotationPoint[]) => { annotationPointsByImage.value[sourceUrl.value] = points },
+})
+const uploading = ref(false)
+const annotating = computed(() => selections.value.image_edit_method?.optionId === 'annotate')
 const selecting = ref(false)
 const drawing = computed(() => selections.value.layer_selection_method?.optionId === 'draw_boxes')
 watch(() => props.sourceImages, (images) => {
@@ -48,7 +65,12 @@ watch(
   () => {
     selections.value = {}
     regionsByImage.value = {}
+    annotationPointsByImage.value = {}
     for (const answer of props.answers || []) {
+      if (answer.annotationEdit) {
+        sourceUrl.value = answer.annotationEdit.imageUrl
+        annotationPointsByImage.value[answer.annotationEdit.imageUrl] = answer.annotationEdit.points.map(point => ({ ...point }))
+      }
       if (answer.optionId)
         selections.value[answer.questionId] = { optionId: answer.optionId, text: answer.text || '' }
       if (answer.questionId === 'layer_selection_method' && answer.optionId === 'draw_boxes') {
@@ -70,7 +92,7 @@ function selectedOption(question: ChoiceQuestion) {
 }
 
 function selectOption(question: ChoiceQuestion, optionId: string) {
-  if (!isPending.value || props.pending)
+  if (props.readOnly || !isPending.value || props.pending || uploading.value)
     return
   const option = question.options.find(item => item.id === optionId)
   if (!option)
@@ -87,7 +109,7 @@ function selectOption(question: ChoiceQuestion, optionId: string) {
 
 function setCustomText(questionId: string, value: string) {
   const current = selections.value[questionId]
-  if (!current)
+  if (props.readOnly || !current)
     return
   selections.value = {
     ...selections.value,
@@ -99,7 +121,9 @@ function setCustomText(questionId: string, value: string) {
 }
 
 const canSubmit = computed(() => {
-  if (!isPending.value || props.pending)
+  if (props.readOnly || !isPending.value || props.pending || uploading.value)
+    return false
+  if (annotating.value && (!sourceUrl.value || !annotationPoints.value.length || annotationPoints.value.some(point => !point.text.trim())))
     return false
   if (drawing.value && (!imageSelections.value.length || imageSelections.value.some(selection => !selection.regions.length) || selecting.value))
     return false
@@ -124,6 +148,9 @@ function emitSubmit() {
       optionId: current?.optionId,
       label: option?.label,
       text: current?.text.trim() || undefined,
+      ...(question.id === 'image_edit_method' && current?.optionId === 'annotate'
+        ? { annotationEdit: { imageUrl: sourceUrl.value, points: annotationPoints.value.map(point => ({ ...point })) } }
+        : {}),
       ...(question.id === 'layer_selection_method' && current?.optionId === 'draw_boxes'
         ? { imageSelections: imageSelections.value }
         : {}),
@@ -159,12 +186,13 @@ const resolvedAnswers = computed(() => {
 </script>
 
 <template>
-  <AgentLabTextEditor v-if="choice.textEdit || choice.textEdits" :key="choice.id" :edit="choice.textEdit" :edits="choice.textEdits" :pending="pending" :state="state" :answers="answers" @submit="emit('submit', $event)" @skip="emit('skip')" />
+  <AgentLabSketchChoice v-if="choice.questions.length === 1 && ['sketch_references', 'sketch_understanding', 'sketch_notes', 'sketch_prompt'].includes(choice.questions[0]!.id)" :key="choice.id" :choice="choice" :state="state" :answers="answers" :read-only="readOnly" :pending="pending" :reference-images="referenceImages" :source-images="sourceImages" :upload-image="uploadImage" @submit="emit('submit', $event)" @browse-assets="emit('browseAssets')" />
+  <AgentLabTextEditor v-else-if="choice.textEdit || choice.textEdits" :key="choice.id" :edit="choice.textEdit" :edits="choice.textEdits" :pending="pending" :read-only="readOnly" :state="state" :answers="answers" @submit="emit('submit', $event)" @skip="emit('skip')" />
   <Card
     v-else
     class="relative w-full gap-4 rounded-2xl border-blue-500/70 py-4 shadow-none"
   >
-    <AgentLabCardBorder v-if="isPending" tone="attention" />
+    <AgentLabCardBorder v-if="isPending && !readOnly" tone="attention" />
     <CardHeader class="gap-1.5 px-4">
       <div class="flex items-center justify-between gap-2">
         <CardTitle class="text-sm font-medium">
@@ -183,11 +211,14 @@ const resolvedAnswers = computed(() => {
           Saved
         </Badge>
       </div>
-      <CardDescription v-if="isPending && choice.recommendation">
-        {{ choice.recommendation }}
+      <p v-if="readOnly && isPending" class="text-xs text-muted-foreground">
+        Pending
+      </p>
+      <CardDescription v-if="isPending && recommendation">
+        {{ recommendation }}
       </CardDescription>
       <p
-        v-else-if="isPending"
+        v-else-if="isPending && !readOnly"
         class="text-xs text-muted-foreground"
       >
         Skip any time to let the agent decide.
@@ -221,7 +252,7 @@ const resolvedAnswers = computed(() => {
               :class="selectedOption(question)?.id === option.id
                 ? 'border-primary bg-primary/10'
                 : 'border-border bg-muted/35 hover:bg-accent'"
-              :disabled="pending"
+              :disabled="pending || readOnly || uploading"
               :aria-pressed="selectedOption(question)?.id === option.id"
               @click="selectOption(question, option.id)"
             >
@@ -249,7 +280,7 @@ const resolvedAnswers = computed(() => {
             v-if="selectedOption(question)?.custom"
             :id="`agent-choice-${choice.id}-${question.id}`"
             :model-value="selections[question.id]?.text || ''"
-            :disabled="pending"
+            :disabled="pending || readOnly || uploading"
             class="mt-2 h-10 rounded-xl bg-input/30 shadow-none"
             placeholder="Type your own"
             :aria-label="`Custom answer: ${question.prompt}`"
@@ -257,17 +288,28 @@ const resolvedAnswers = computed(() => {
             @keydown.enter.prevent="emitSubmit()"
           />
         </fieldset>
+        <section v-if="annotating" class="flex min-w-0 flex-col gap-3" aria-label="Annotate image edits">
+          <div v-if="(sourceImages?.length || 0) > 1" class="flex flex-wrap gap-2" aria-label="Choose image to edit">
+            <button v-for="image in sourceImages" :key="image.id" type="button" class="rounded-lg border p-1" :class="sourceUrl === image.url ? 'border-primary' : 'border-border'" :aria-pressed="sourceUrl === image.url" :disabled="pending || readOnly || uploading" @click="sourceUrl = image.url">
+              <img :src="image.url" alt="Select image to edit" class="size-16 object-contain">
+            </button>
+          </div>
+          <ToolsImageAnnotationEditor v-if="sourceUrl" :key="sourceUrl" v-model="annotationPoints" :src="sourceUrl" :disabled="pending || readOnly" :reference-images="referenceImages" :upload-image="uploadImage" @uploading="uploading = $event" @browse-assets="emit('browseAssets')" />
+          <p v-else role="status" class="text-sm text-muted-foreground">
+            Upload a source image in the chat first.
+          </p>
+        </section>
         <section v-if="drawing" class="flex min-w-0 flex-col gap-3" aria-label="Select image layers">
           <p class="text-sm text-muted-foreground">
             Draw boxes on each image, then confirm all images together. Your boxes are saved when switching images.
           </p>
           <div v-if="(sourceImages?.length || 0) > 1" class="flex flex-wrap gap-2" aria-label="Source image">
-            <button v-for="image in sourceImages" :key="image.id" type="button" class="rounded-lg border p-1" :class="sourceUrl === image.url ? 'border-primary' : 'border-border'" :aria-pressed="sourceUrl === image.url" :disabled="pending || selecting" @click="sourceUrl = image.url">
+            <button v-for="image in sourceImages" :key="image.id" type="button" class="rounded-lg border p-1" :class="sourceUrl === image.url ? 'border-primary' : 'border-border'" :aria-pressed="sourceUrl === image.url" :disabled="pending || readOnly || selecting" @click="sourceUrl = image.url">
               <img :src="image.url" alt="Select source image" class="size-16 object-contain">
               <span class="block text-xs">{{ regionsByImage[image.url]?.length || 0 }} regions</span>
             </button>
           </div>
-          <ToolsImageRegionSelector v-if="sourceUrl" :key="sourceUrl" v-model="regions" :src="sourceUrl" :disabled="pending" @selecting="selecting = $event" />
+          <ToolsImageRegionSelector v-if="sourceUrl" :key="sourceUrl" v-model="regions" :src="sourceUrl" :disabled="pending || readOnly || uploading" @selecting="selecting = $event" />
           <p v-else role="status" class="text-sm text-muted-foreground">
             No source image is available. Upload an image in the chat first.
           </p>
@@ -288,6 +330,11 @@ const resolvedAnswers = computed(() => {
           <p class="mt-0.5 text-sm text-foreground">
             {{ item.skipped ? 'Agent will decide' : (item.summary || 'Saved') }}
           </p>
+          <div v-if="item.answer?.annotationEdit" class="mt-2 flex flex-col gap-1 text-sm">
+            <p v-for="(point, index) in item.answer.annotationEdit.points" :key="index">
+              {{ index + 1 }}. {{ point.text }}
+            </p>
+          </div>
           <p v-if="item.answer?.imageSelections?.length" class="mt-1 text-xs text-muted-foreground">
             {{ item.answer.imageSelections.length }} images · {{ item.answer.imageSelections.reduce((total, selection) => total + selection.regions.length, 0) }} regions confirmed
           </p>
@@ -298,12 +345,12 @@ const resolvedAnswers = computed(() => {
       </div>
     </CardContent>
 
-    <CardFooter v-if="isPending" class="justify-end gap-2 border-t border-border px-4 pt-3">
+    <CardFooter v-if="isPending && !readOnly" class="justify-end gap-2 border-t border-border px-4 pt-3">
       <Button
         variant="outline"
         size="sm"
         class="rounded-lg shadow-none"
-        :disabled="pending"
+        :disabled="pending || readOnly || uploading"
         @click="emit('skip')"
       >
         Skip
@@ -315,7 +362,7 @@ const resolvedAnswers = computed(() => {
         @click="emitSubmit"
       >
         <Spinner v-if="pending" />
-        {{ drawing ? `Confirm ${imageSelections.length} image${imageSelections.length === 1 ? '' : 's'}` : 'Continue' }}
+        {{ annotating ? 'Confirm edits' : drawing ? `Confirm ${imageSelections.length} image${imageSelections.length === 1 ? '' : 's'}` : 'Continue' }}
       </Button>
     </CardFooter>
   </Card>

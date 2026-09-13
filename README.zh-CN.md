@@ -20,15 +20,33 @@
   遇到无法解决的问题，请通过 <a href="https://discord.gg/FwN6s664Dh">Discord</a> 联系我。
 </p>
 
-![PoloX AI 工作台：Agent 对话、无限画布与视频创作项目](docs/images/polox-ai-workspace.png)
-
-![PoloX AI 动画创作项目：Agent 生成详情与画布上的手绘风格视频](docs/images/polox-ai-animation-workspace.png)
-
 ## 简介
 
 本项目是 [PoloX AI](https://polox.ai) 的开源版本，与 [Lovart](https://lovart.ai)、[Crepal](https://crepal.ai) 同属 AI 创作平台。PoloX 采用 **Agent 原生**的产品设计：以 Agent 对话与无限画布承载全部交互，将创作、生成与编辑融入连续的工作流程。你只需描述想法，与 Agent 沟通，并在画布上持续完善结果。
 
-PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 OpenRouter 和 fal API Key 即可，无需注册 PoloX 账号或订阅。项目、对话、生成记录和媒体文件保存在本机；AI 推理由外部服务提供，相关输入会发送给服务商，API 使用费用由服务商收取。
+PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 [WaveSpeed](https://wavespeed.ai) API Key 即可，无需注册 PoloX 账号或订阅。项目、对话、生成记录和媒体文件保存在本机；AI 推理由外部服务提供，相关输入会发送给服务商，API 使用费用由服务商收取。WaveSpeed 支持信用卡、微信和支付宝结账。
+
+## 更新
+
+### 2026 年 9 月 13 日
+
+- 接入 GPT Image 2.5 Flare 和 Sunburst 两个模型
+- 增加了 Product Hunt skill
+- 增加草图到图像 skill
+- 增加 annotation/comment 编辑图片 skill
+- API provider 改为 [WaveSpeed.ai](https://wavespeed.ai)，便于使用信用卡 / 微信 / 支付宝结账
+- 优化了 Agent 的 prompt、skill 结构，去除冗余内容
+- 修复了其他已知 bug
+
+## 如何更新
+
+和 Codex 说：
+
+```text
+拉取 https://github.com/saihhold-zhao/polox_ai 最新代码并安装依赖。
+```
+
+⚠️ 若您已经修改了当前代码，可能产生代码冲突，可通过 Codex 进行解决。
 
 ## 使用 Codex 安装
 
@@ -60,6 +78,7 @@ PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 OpenRouter 
 git clone https://github.com/saihhold-zhao/polox_ai.git
 cd polox_ai
 pnpm i
+pnpm browser:install
 pnpm dev
 ```
 
@@ -70,6 +89,8 @@ pnpm dev
 ```
 
 打开 [http://localhost:3001](http://localhost:3001)，使用期间保持终端运行。按 `Ctrl+C` 可停止服务。
+
+首页 Skills 板块包含草图生图、图片文字编辑、图层拆分和 Product Hunt gallery。点击卡片或在 Agent 输入框输入 `/` 即可选择。从首页启动草图会在项目中新建 Agent。Product Hunt 网站读取使用 Playwright Chromium；Linux 环境可运行 `pnpm browser:install:linux` 安装所需系统依赖。
 
 ### 安装 FFmpeg：用于视频拼接
 
@@ -97,14 +118,14 @@ ffprobe -version
 
 安装完成后，请重新启动开发服务。
 
-## 获取并配置 OpenRouter 和 fal API Key
+## 获取并配置 WaveSpeed API Key
 
-1. 启动 PoloX，点击右上角红色的 **API keys not configured**（尚未配置 API Key）提示。
-2. 在 **Service connection**（服务连接）弹窗中，通过 **Get API key** 链接获取 [OpenRouter Key](https://openrouter.ai/workspaces/default/keys) 和 [fal Key](https://fal.ai/login?returnTo=%2Fdashboard%2Fkeys)。
-3. 将两个 Key 分别填入对应输入框，点击 **Test connection**（连通测试）。
-4. 两项测试通过后，提示会变为绿色的 **Services connected**（服务已连接），即可开始创作。
+1. 启动 PoloX，点击右上角红色的 **API key not configured**（尚未配置 API Key）提示。
+2. 在 **Service connection**（服务连接）弹窗中，通过 **Get API key** 链接获取 [WaveSpeed Key](https://wavespeed.ai/accesskey)。
+3. 将 Key 填入输入框，点击 **Test connection**（连通测试）。
+4. 测试通过后，提示会变为绿色的 **Services connected**（服务已连接），即可开始创作。
 
-默认 Agent 模型为 **DeepSeek V4 Flash Vision Exp**（`deepseek/deepseek-v4-flash-vision-exp`），在维护者的测试中表现良好。你可以在同一弹窗中修改 OpenRouter 模型。连通测试会发送一次简短的模型请求，可能产生少量 API 费用。
+Agent LLM 已锁定为 `moonshotai/kimi-k3`，界面无需再选择模型。连通测试会发送一次简短的模型请求，可能产生少量 API 费用。
 
 ## 已接入的 AI 模型
 
@@ -114,6 +135,7 @@ ffprobe -version
 
 | 工具 | 功能与用法 |
 | --- | --- |
+| **Sketch to Image · 草图生成图片** | 选择 `@sketch-to-image`，在项目对话内绘制线条和文字。保存草图到项目后，可上传参考图或从项目中选择图片；确认 Agent 对图片的理解后，即使用 GPT Image 2.5 Flare 生成。支持移动和旋转元素、调整字号、撤销与重做。需配置 WaveSpeed 服务。 |
 | **Image Text Editor · 图片文字编辑** | 编辑图片中的文字。可以直接询问 PoloX Agent 如何操作；支持一次上传多张图片进行批量编辑。 |
 | **Image Layer Splitter · 图片图层拆分** | 将图片中指定的元素提取为独立图层。上传图片并告诉 Agent 你想拆分哪些元素，Agent 会引导你选择元素或绘制选框。 |
 | **Image Background Removal · 图片去背景** | 移除上传图片的背景，保留透明 PNG。 |

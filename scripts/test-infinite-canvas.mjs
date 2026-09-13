@@ -295,3 +295,64 @@ test('drag snap range remains six screen pixels across zoom levels and releases 
   const rect = { x: 15, y: 25, width: 280, height: 280 }
   assert.deepEqual(snapCanvasRect(rect, [], 1), { rect, guides: [] })
 })
+
+test('task arrangement keeps results together, aligns columns and preserves media proportions', async () => {
+  const { arrangeCanvasByTask } = await import('../app/utils/infiniteCanvas.ts')
+  const items = [
+    { id: 'new:0', taskId: 'new', name: 'New', createdAt: '2026-09-11T00:00:00Z' },
+    ...Array.from({ length: 7 }, (_, index) => ({ id: `old:${index}`, taskId: 'old', name: `Layer ${index}`, createdAt: '2026-09-10T00:00:00Z' })),
+    { id: 'upload', name: 'Reference' },
+  ]
+  const positions = new Map(items.map((item, index) => [item.id, { x: -index * 34, y: index * 63, width: index % 2 ? 558 : 280, height: index % 3 ? 280 : 650 }]))
+  positions.set('unloaded', { x: 999, y: 888, width: 280, height: 280 })
+  const before = structuredClone(positions)
+  const arranged = arrangeCanvasByTask(items, positions)
+  assert.deepEqual(positions, before)
+  assert.deepEqual(arranged.get('unloaded'), before.get('unloaded'))
+  assert.equal(arranged.get('upload').y, 0)
+  const firstRowY = arranged.get('old:0').y
+  assert.equal(firstRowY, arranged.get('upload').height + 80)
+  for (let index = 0; index < 5; index++) {
+    assert.equal(arranged.get(`old:${index}`).x, index * 320)
+    assert.equal(arranged.get(`old:${index}`).y, firstRowY)
+  }
+  const firstRowBottom = Math.max(...Array.from({ length: 5 }, (_, index) => {
+    const rect = arranged.get(`old:${index}`)
+    return rect.y + rect.height
+  }))
+  assert.equal(arranged.get('old:5').y, firstRowBottom + 40)
+  assert.equal(arranged.get('old:6').y, firstRowBottom + 40)
+  assert.equal(arranged.get('new:0').y, Math.max(...[5, 6].map(index => {
+    const rect = arranged.get(`old:${index}`)
+    return rect.y + rect.height
+  })) + 80)
+  for (const item of items) {
+    const old = positions.get(item.id)
+    const rect = arranged.get(item.id)
+    assert.equal(rect.width, 280)
+    assert.ok(Math.abs((rect.height - 2) / (rect.width - 2) - (old.height - 2) / (old.width - 2)) < 1e-10)
+    for (const other of items.filter(other => other.id !== item.id).map(other => arranged.get(other.id))) {
+      assert.ok(rect.x + rect.width + 40 <= other.x || other.x + other.width + 40 <= rect.x
+        || rect.y + rect.height + 40 <= other.y || other.y + other.height + 40 <= rect.y)
+    }
+  }
+  assert.deepEqual(arrangeCanvasByTask(items, arranged), arranged)
+})
+
+test('task arrangement ignores unavailable and hidden cards without leaving holes', async () => {
+  const { arrangeCanvasByTask } = await import('../app/utils/infiniteCanvas.ts')
+  const items = [
+    { id: 'missing', taskId: 'task', name: 'Missing' },
+    { id: 'hidden', taskId: 'task', name: 'Hidden' },
+    { id: 'visible', taskId: 'task', name: 'Visible' },
+  ]
+  const positions = new Map([
+    ['hidden', { x: 500, y: 500, width: 280, height: 280, hidden: true }],
+    ['visible', { x: 600, y: 700, width: 280, height: 280 }],
+  ])
+  const arranged = arrangeCanvasByTask(items, positions)
+  assert.equal(arranged.has('missing'), false)
+  assert.deepEqual(arranged.get('hidden'), positions.get('hidden'))
+  assert.deepEqual(arranged.get('visible'), { x: 0, y: 0, width: 280, height: 280 })
+  assert.deepEqual(arrangeCanvasByTask([], new Map()), new Map())
+})

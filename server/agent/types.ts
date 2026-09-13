@@ -1,3 +1,4 @@
+import type { ImageAnnotationEdit } from '~~/shared/utils/imageAnnotations'
 import type { ImageTextEdit, ImageTextLine } from '~~/shared/utils/imageTextEditor'
 
 export const GPT_IMAGE_2_ASPECT_RATIOS = [
@@ -207,6 +208,8 @@ export interface ChoicePayload {
 }
 
 export interface ChoiceAnswer {
+  referenceImages?: { url: string, name: string }[]
+  annotationEdit?: ImageAnnotationEdit
   imageSelections?: { imageUrl: string, regions: number[][] }[]
   textEdits?: ImageTextEdit[]
   textLines?: ImageTextLine[]

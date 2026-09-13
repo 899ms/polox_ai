@@ -4,10 +4,10 @@ import { AGENT_CONCAT_MODEL } from '~~/shared/utils/agentConcat'
 import { AGENT_MODELS } from '~~/shared/utils/agentModels'
 import { IDEOGRAM_REMOVE_BACKGROUND_MODEL } from '~~/shared/utils/ideogram'
 import { GENERATION_ACTIVE_STATES } from '../../shared/types/generation'
+import { generationProvider } from '../../shared/utils/wavespeedSchema'
 import { GenerationJob } from '../models/generationJob'
 import { agentResultTaskId, httpUrlList } from './agentJobs'
 import { syncAgentRuntimeFromJob } from './agentSessionRuntime'
-import { isFalGenerateModel } from './falGenerate'
 import { generationConcurrency } from './generationConcurrency'
 import { countActiveGenerationJobs, dispatchQueuedJobs } from './generationQueue'
 import { resolveProject } from './projects'
@@ -30,7 +30,7 @@ function queueMessage(limit: number, active: number) {
 function modelMeta(kind: string, sourceUrl: string, videoMode: string, videoFamily: string) {
   if (kind === 'cutout') {
     return {
-      provider: 'fal' as const,
+      provider: generationProvider(IDEOGRAM_REMOVE_BACKGROUND_MODEL),
       model: IDEOGRAM_REMOVE_BACKGROUND_MODEL,
       category: 'Tools',
       task: 'Remove Background',
@@ -53,21 +53,21 @@ function modelMeta(kind: string, sourceUrl: string, videoMode: string, videoFami
         : 'bytedance/seedance-2'
     if (videoMode === 'reference') {
       return {
-        provider: 'fal' as const,
+        provider: generationProvider(`${prefix}-text-to-video`),
         model: `${prefix}-reference-to-video`,
         category: 'Video',
         task: 'Reference to Video',
       }
     }
     return {
-      provider: 'fal' as const,
+      provider: generationProvider(`${prefix}-text-to-video`),
       model: videoMode === 'image' ? `${prefix}-image-to-video` : `${prefix}-text-to-video`,
       category: 'Video',
       task: videoMode === 'image' ? 'Image to Video' : 'Text to Video',
     }
   }
   return {
-    provider: 'fal' as const,
+    provider: generationProvider('gpt-image-2-text-to-image'),
     model: sourceUrl ? 'gpt-image-2-image-to-image' : 'gpt-image-2-text-to-image',
     category: 'Image',
     task: sourceUrl ? 'Image to Image' : 'Text to Image',
@@ -127,7 +127,7 @@ export async function acquireAgentSlot(input: {
   const registered = input.modelId ? AGENT_MODELS.find(model => model.id === input.modelId) : undefined
   if (input.modelId && !registered)
     throw new Error('Unknown Agent model')
-  const meta = registered ? { model: registered.id, category: registered.category, task: registered.task, provider: 'fal' as const } : modelMeta(kind, stills[0] || sourceUrl, videoMode, String(input.videoFamily || ''))
+  const meta = registered ? { model: registered.id, category: registered.category, task: registered.task, provider: generationProvider(registered.id) } : modelMeta(kind, stills[0] || sourceUrl, videoMode, String(input.videoFamily || ''))
   const prompt = String(input.prompt || '').trim()
   let inputPayload: Record<string, unknown> = {
     prompt,
@@ -145,7 +145,7 @@ export async function acquireAgentSlot(input: {
   if (input.duration)
     inputPayload.duration = input.duration
   if (kind === 'cutout' && stills[0]) {
-    inputPayload.image_url = stills[0]
+    inputPayload = { image: stills[0] }
   }
   else if (kind === 'video' && videoMode === 'reference') {
     if (stills.length)
@@ -159,7 +159,12 @@ export async function acquireAgentSlot(input: {
       inputPayload.last_frame_url = stills[1]
   }
   else if (stills.length) {
-    inputPayload.input_urls = stills
+    inputPayload.images = stills
+  }
+  if (meta.model.startsWith('gpt-image-2-')) {
+    inputPayload.resolution = String(input.resolution || '1k').toLowerCase()
+    if (!inputPayload.aspect_ratio || ['auto', 'adaptive'].includes(String(inputPayload.aspect_ratio)))
+      delete inputPayload.aspect_ratio
   }
   if (registered && input.modelInput)
     inputPayload = input.modelInput

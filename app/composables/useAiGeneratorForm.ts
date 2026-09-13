@@ -5,10 +5,9 @@ import { toast } from 'vue-sonner'
 import { isGenerationActive, isGenerationQueued, isGenerationTerminal } from '~~/shared/types/generation'
 import { readErrorMessage } from '~~/shared/utils/apiError'
 import { isFlux3GenerateModel } from '~~/shared/utils/flux3'
-import { gptCompatibleAspect, gptCompatibleResolution } from '~~/shared/utils/gptImage2'
 import { useToolAgent } from '@/composables/useToolAgent'
 import { AI_CATEGORIES, AI_MODELS, AI_TASKS } from '@/constants/aiModels'
-import { createDefaultValues, getFieldsByPlacement, getInputSchema, isFormValid, mergePreservedValues, parseFieldConfigs } from '@/lib/aiModelSchema'
+import { createDefaultValues, createModelInput, getFieldsByPlacement, getInputSchema, isFormValid, mergePreservedValues, parseFieldConfigs } from '@/lib/aiModelSchema'
 
 const MAX_IMAGE_BYTES = 30 * 1024 * 1024
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024
@@ -215,21 +214,20 @@ export function useAiGeneratorForm() {
   const uploadFields = computed(() => primaryFields.value.filter(field => field.widget === 'upload'))
   const isUploading = computed(() => Object.values(uploadedByField.value).some(items => items.some(item => item.status === 'uploading')))
   const hasReferenceUploads = computed(() => {
-    const keys = selectedModel.value?.id.startsWith('minimax-h3/') || selectedModel.value?.id.startsWith('wan/')
-      ? ['reference_image_urls', 'reference_video_urls', 'reference_audio_urls']
-      : ['reference_image_urls', 'reference_video_urls', 'reference_audio_urls', 'image_urls', 'video_urls', 'audio_urls']
+    const keys = ['bytedance/seedance-2-reference-to-video', 'bytedance/seedance-2-5-reference-to-video'].includes(selectedModel.value?.id || '')
+      ? ['video']
+      : selectedModel.value?.id.startsWith('minimax-h3/')
+        ? ['reference_images', 'reference_videos']
+        : ['reference_images', 'reference_videos', 'reference_audios', 'reference_image_urls', 'reference_video_urls', 'reference_audio_urls', 'image_urls', 'video_urls', 'audio_urls']
     return keys.some(key => Boolean(typeof formValues.value[key] === 'string' ? formValues.value[key] : Array.isArray(formValues.value[key]) && (formValues.value[key] as unknown[]).length))
   })
-  const hasI2vFrame = computed(() => ['first_frame_url', 'last_frame_url', 'image_url', 'start_image_url', 'end_image_url']
-    .some(key => Boolean(typeof formValues.value[key] === 'string' ? formValues.value[key] : Array.isArray(formValues.value[key]) && (formValues.value[key] as unknown[]).length)))
-  const hasFirstFrame = computed(() => ['first_frame_url', 'image_url']
+  const hasFirstFrame = computed(() => ['first_frame_url', 'image_url', 'image']
     .some(key => Boolean(typeof formValues.value[key] === 'string' ? formValues.value[key] : Array.isArray(formValues.value[key]) && (formValues.value[key] as unknown[]).length)))
   const canGenerate = computed(() => {
     const modelId = selectedModel.value?.id ?? ''
     return Boolean(selectedModel.value)
       && isFormValid(fields.value, formValues.value)
       && (!modelId.includes('reference-to-video') || hasReferenceUploads.value)
-      && (modelId !== 'minimax-h3/image-to-video' || hasI2vFrame.value)
       && (!isFlux3GenerateModel(modelId) || !modelId.includes('image-to-video') || hasFirstFrame.value)
       && !isUploading.value
       && !isSubmitting.value
@@ -352,14 +350,6 @@ export function useAiGeneratorForm() {
       ...formValues.value,
       [key]: value,
     }
-    if (selectedModel.value?.id.startsWith('gpt-image-2')) {
-      const aspect = String(nextValues.aspect_ratio ?? 'auto')
-      const resolution = String(nextValues.resolution ?? '1K')
-      if (key === 'resolution')
-        nextValues.aspect_ratio = gptCompatibleAspect(resolution, aspect)
-      else if (key === 'aspect_ratio')
-        nextValues.resolution = gptCompatibleResolution(aspect, resolution)
-    }
     formValues.value = nextValues
   }
   async function addUploadedFiles(fieldKey: string, files: FileList | File[]) {
@@ -367,7 +357,7 @@ export function useAiGeneratorForm() {
     if (!uploadField)
       return
     const accept = uploadField.property['x-accept'] || DEFAULT_IMAGE_ACCEPT
-    const maxItems = uploadField.property.maxItems ?? 10
+    const maxItems = uploadField.property.type === 'string' ? 1 : uploadField.property.maxItems ?? 10
     const remaining = Math.max(0, maxItems - itemsForField(fieldKey).length)
     const accepted: File[] = []
     for (const file of Array.from(files).slice(0, remaining)) {
@@ -517,7 +507,7 @@ export function useAiGeneratorForm() {
       return
     }
 
-    const payload = Object.fromEntries(fields.value.map(field => [field.key, formValues.value[field.key]]))
+    const payload = createModelInput(fields.value, formValues.value)
     isSubmitting.value = true
     try {
       if (options.inAgent) {

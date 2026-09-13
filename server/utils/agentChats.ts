@@ -217,6 +217,7 @@ export function toWorkspaceAgentChat(doc: IAgentChat) {
     sessionId: doc.sessionId,
     projectId: doc.projectId || '',
     preview: doc.preview || '',
+    createdAt: new Date(doc.createdAt).getTime(),
     updatedAt: new Date(doc.lastEventAt || doc.updatedAt).getTime(),
     messages: doc.messages || [],
     images: doc.images || [],
@@ -238,5 +239,4 @@ export async function listAgentChats(projectId = '') {
   }
   return AgentChat.find(filter)
     .sort({ lastEventAt: -1 })
-    .limit(20)
 }

@@ -76,7 +76,7 @@ const sourceAssets = computed(() => {
     }
     if (taskIds.has(persistedId) || taskIds.has(item.providerTaskId || item.id))
       continue
-    result.push({ id: `${persistedId}:0`, url: item.url, name: assetName(item), prompt: item.prompt, video: item.kind === 'video', cutout: item.kind === 'cutout', state: item.status, error: item.error })
+    result.push({ id: `${persistedId}:0`, taskId: item.providerTaskId || undefined, url: item.url, name: assetName(item), prompt: item.prompt, video: item.kind === 'video', cutout: item.kind === 'cutout', state: item.status, error: item.error })
   }
   return result
 })
@@ -663,6 +663,17 @@ onBeforeUnmount(() => {
               <p v-if="asset.state !== 'success'" class="line-clamp-3">
                 {{ asset.state === 'fail' ? asset.error || 'Generation failed' : 'Generating…' }}
               </p>
+              <button
+                v-if="asset.state === 'fail'"
+                type="button"
+                class="rounded border px-3 py-1 text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                :style="{ fontSize: labelSize }"
+                :disabled="deletingTaskId === (asset.taskId || asset.id)"
+                aria-label="Delete failed result"
+                @click.stop="emit('delete', asset.taskId || asset.id)"
+              >
+                Delete
+              </button>
             </div>
           </div>
           <AgentLabCardBorder v-if="isGenerationActive(asset.state)" tone="generating" class="z-10" />
@@ -702,7 +713,7 @@ onBeforeUnmount(() => {
       <div class="flex items-center justify-between text-xs text-muted-foreground">
         <span>{{ asset.video ? 'VIDEO' : 'IMAGE' }}</span>
         <div class="flex gap-1">
-          <button class="canvas-action" aria-label="View details" title="View details" @click="detailAsset = asset">
+          <button v-if="asset.job || asset.taskId" class="canvas-action" aria-label="View details" title="View details" @click="detailAsset = asset">
             <Icon name="i-lucide-info" />
           </button>
           <button v-if="asset.url && asset.state === 'success'" class="canvas-action" aria-label="Open result" @click="view(asset)">

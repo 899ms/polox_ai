@@ -34,6 +34,34 @@ test('mentions include project jobs from other chats, every layer, videos, and u
   assert.equal(assets(props, 'missing').length, 0)
 })
 
+test('a new agent can mention and search uploads from another agent in the project', () => {
+  const props = {
+    projectJobs: [],
+    projectImages: [
+      { id: 'other-agent-upload', url: 'reference.png', name: 'Reference portrait' },
+      { id: 'other-agent-video', url: 'reference.mp4', name: 'Reference clip', kind: 'video' },
+    ],
+    images: [],
+  }
+  assert.equal(assets(props).length, 2)
+  assert.equal(assets(props, 'portrait')[0].url, 'reference.png')
+  assert.equal(assets(props, 'clip')[0].video, true)
+  // Selecting the shared upload adds it to the active agent without duplicating the picker entry.
+  props.images.push(props.projectImages[0])
+  assert.equal(assets(props).length, 2)
+  props.projectImages = []
+  props.images = []
+  assert.equal(assets(props).length, 0)
+})
+
+test('both project and homepage composers bind project media independently of transcript media', () => {
+  for (const path of ['../app/pages/projects/[id].vue', '../app/components/home/HomeAgentComposer.vue']) {
+    const component = readFileSync(new URL(path, import.meta.url), 'utf8')
+    assert.match(component, /:project-images="allImages"/)
+    assert.match(component, /:images="(?:newAgentOnSend \? \[\] : )?images"/)
+  }
+})
+
 test('switching to an empty project leaves no prior project assets', () => {
   assert.equal(assets({ projectJobs: [], images: [] }).length, 0)
 })
@@ -72,7 +100,7 @@ test('homepage loads every page scoped to the selected project', async () => {
 
 test('homepage ignores an old project response after switching projects', async () => {
   let respond
-  const state = homeLoader(() => new Promise(resolve => { respond = resolve }))
+  const state = homeLoader(() => new Promise((resolve) => { respond = resolve }))
   const pending = state.loadProjectAssets()
   state.selectedProjectId.value = 'new-project'
   respond({ items: [{ taskId: 'old-project-job' }], total: 1 })

@@ -1,3 +1,5 @@
+export const IMAGE_TEXT_EDITOR_MODEL = 'gpt-image-2-5-sunburst-image-to-image'
+
 export interface ImageTextLine {
   original: string
   text: string

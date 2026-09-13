@@ -1,10 +1,19 @@
 import type { AiModelConfig, SchemaProperty } from '../types/aiModel'
 import Ajv from 'ajv'
 import { AI_MODELS, COMPANY_LOGOS, MODEL_COMPANIES } from '../constants/aiModels'
+import { readSkillCommands } from './agentSkills'
 import { falInputSchema } from './falSchema'
+import { SKETCH_TO_IMAGE_MODEL, SKETCH_TO_IMAGE_TOOL } from './sketchToImage'
+import { wavespeedInputSchema } from './wavespeedSchema'
 
 // One catalog for the composer, model tools, validation metadata.
 export const AGENT_MODELS: AiModelConfig[] = [...AI_MODELS, {
+  ...AI_MODELS.find(model => model.id === SKETCH_TO_IMAGE_MODEL)!,
+  id: SKETCH_TO_IMAGE_TOOL,
+  name: 'Sketch to Image',
+  category: 'Tools',
+  icon: 'lucide:pencil-ruler',
+}, {
   id: 'image-text-editor',
   name: 'Image Text Editor',
   category: 'Tools',
@@ -43,8 +52,9 @@ export function agentModelLogo(model: AiModelConfig) {
 export function modelMention(model: AiModelConfig) {
   return `@[${model.name} · ${model.task}](model:${model.id})`
 }
-export function readModelMentions(text: string) {
-  return [...new Set([...text.matchAll(/@\[[^\]]+\]\(model:([^\s)]+)\)/g)].map(match => match[1]!))]
+export function readModelMentions(text: string, includeSkills = false) {
+  const skills = includeSkills ? readSkillCommands(text).map(skill => skill.id) : []
+  return [...new Set([...text.matchAll(/@\[[^\]]+\]\(model:([^\s)]+)\)/g)].map(match => match[1]!).concat(skills))]
     .filter(id => AGENT_MODELS.some(model => model.id === id))
 }
 export function stripModelMentions(text: string) {
@@ -64,12 +74,12 @@ export const registeredModelTools = AGENT_MODELS.map(model => ({
   type: 'function' as const,
   function: {
     name: agentModelToolName(model.id),
-    description: `${model.name}: ${model.task}. Exact model ID: ${model.id}. Use when explicitly requested or in Custom mode. Required media must come from the user or actual session results. Apply documented defaults for omitted settings; ask_user for missing decisions, ask for uploads in chat for missing media. Never switch the user's requested model silently.`,
+    description: `${model.name}: ${model.task}. Exact model ID: ${model.id}. ${model.id === SKETCH_TO_IMAGE_TOOL ? 'Follow sketch-to-image: save the sketch, ask about references, visually inspect all images and confirm your understanding with ask_user. After Correct, compose the prompt and generate immediately without further creative checkpoints. ' : ''}Use when explicitly requested or in Custom mode. Required media must come from the user or actual session results. Apply documented defaults for omitted settings; ask_user for missing decisions, ask for uploads in chat for missing media. Never switch the user's requested model silently.`,
     parameters: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        ...Object.fromEntries(Object.entries(falInputSchema(model.id)?.properties || model.schema.components.schemas.Input.properties).filter(([key]) => key !== 'end_user_id').map(([key, prop]) => [key, toolProperty(prop as SchemaProperty)])),
+        ...Object.fromEntries(Object.entries((model.id === 'image-layer-splitter' ? undefined : wavespeedInputSchema(model.id) || falInputSchema(model.id))?.properties || model.schema.components.schemas.Input.properties).filter(([key]) => key !== 'end_user_id').map(([key, prop]) => [key, toolProperty(prop as SchemaProperty)])),
         _name: { type: 'string', description: 'User-visible output title. Follow the latest explicit language preference; otherwise match the latest natural-language user request (retain conversation language for attachment-only requests). Ignore the language of image text, references, @model/task names, tool results, and previous assistant output. English request => English title; Chinese request => Chinese title.' },
         _uncertain_fields: { type: 'array', items: { type: 'string' }, description: 'Inferred settings needing user review under Review when needed.' },
       },
@@ -123,7 +133,7 @@ const modelValidator = new Ajv({ strict: false, allErrors: true, validateFormats
 const modelValidators = new Map<string, ReturnType<typeof modelValidator.compile>>()
 
 export function validateAgentModelInput(model: AiModelConfig, raw: Record<string, unknown>) {
-  const official = falInputSchema(model.id)
+  const official = model.id === 'image-layer-splitter' ? undefined : wavespeedInputSchema(model.id) || falInputSchema(model.id)
   if (official) {
     const { _name, _uncertain_fields, ...values } = raw
     const input = { ...values }

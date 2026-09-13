@@ -2,8 +2,8 @@ import type { GenerationJobPublic } from '../../shared/types/generation'
 import { AGENT_CONCAT_MODEL, isConcatenatedPrompt, isConcatVideoMode } from '~~/shared/utils/agentConcat'
 import { AGENT_MODELS } from '~~/shared/utils/agentModels'
 import { IDEOGRAM_REMOVE_BACKGROUND_MODEL } from '~~/shared/utils/ideogram'
+import { generationProvider } from '../../shared/utils/wavespeedSchema'
 import { GenerationJob } from '../models/generationJob'
-import { isFalGenerateModel } from './falGenerate'
 import { toPublicJob } from './generationResults'
 import { resolveProject } from './projects'
 import { connectDatabase } from './sqlite'
@@ -51,10 +51,10 @@ function isConcatItem(item: AgentResultItem) {
 function modelFor(item: AgentResultItem) {
   const selected = AGENT_MODELS.find(model => model.id === item.modelId)
   if (selected)
-    return { provider: 'fal' as const, model: selected.id, category: selected.category, task: selected.task }
+    return { provider: generationProvider(selected.id), model: selected.id, category: selected.category, task: selected.task }
   if (item.kind === 'cutout') {
     return {
-      provider: 'fal' as const,
+      provider: generationProvider(IDEOGRAM_REMOVE_BACKGROUND_MODEL),
       model: IDEOGRAM_REMOVE_BACKGROUND_MODEL,
       category: 'Tools',
       task: 'Remove Background',
@@ -79,14 +79,14 @@ function modelFor(item: AgentResultItem) {
         : 'bytedance/seedance-2'
     if (mode === 'reference') {
       return {
-        provider: 'fal' as const,
+        provider: generationProvider(`${prefix}-text-to-video`),
         model: `${prefix}-reference-to-video`,
         category: 'Video',
         task: 'Reference to Video',
       }
     }
     return {
-      provider: 'fal' as const,
+      provider: generationProvider(`${prefix}-text-to-video`),
       model: mode === 'image'
         ? `${prefix}-image-to-video`
         : `${prefix}-text-to-video`,
@@ -95,7 +95,7 @@ function modelFor(item: AgentResultItem) {
     }
   }
   return {
-    provider: 'fal' as const,
+    provider: generationProvider('gpt-image-2-text-to-image'),
     model: item.sourceUrl
       ? 'gpt-image-2-image-to-image'
       : 'gpt-image-2-text-to-image',
@@ -111,7 +111,7 @@ function inputFor(item: AgentResultItem) {
   const videos = httpUrlList(item.referenceVideoUrls)
   if (item.kind === 'cutout') {
     return {
-      image_url: stills[0] || item.sourceUrl || item.url,
+      image: stills[0] || item.sourceUrl || item.url,
     }
   }
   if (item.kind === 'video' && isConcatItem(item)) {
@@ -152,9 +152,9 @@ function inputFor(item: AgentResultItem) {
   }
   return {
     prompt,
-    aspect_ratio: item.aspectRatio || 'auto',
-    resolution: item.resolution || '1K',
-    ...(stills.length ? { input_urls: stills } : {}),
+    ...(item.aspectRatio && !['auto', 'adaptive'].includes(item.aspectRatio) ? { aspect_ratio: item.aspectRatio } : {}),
+    resolution: (item.resolution || '1k').toLowerCase(),
+    ...(stills.length ? { images: stills } : {}),
   }
 }
 export async function recordAgentResults(projectId: string, items: AgentResultItem[]) {

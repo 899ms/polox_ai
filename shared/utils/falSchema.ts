@@ -1,8 +1,11 @@
 import type { ModelOpenAPISchema, SchemaProperty } from '../types/aiModel'
 import { FAL_ENDPOINTS } from '../constants/falEndpoints'
 import schemas from '../constants/falSchemas.json'
+import { wavespeedEndpoint } from './wavespeedSchema'
 
 export function falInputSchema(model: string): Record<string, any> | undefined {
+  if (wavespeedEndpoint(model))
+    return undefined
   return (schemas as Record<string, any>)[FAL_ENDPOINTS[model] || model]
 }
 export function falFormSchema(model: string): ModelOpenAPISchema | undefined {

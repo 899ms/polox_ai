@@ -38,7 +38,7 @@ test('assembled system prompt, including loaded skills, contains no Chinese exam
     assert.doesNotMatch(prompt, /\p{Script=Han}/u)
     assert.match(prompt, /# Long-form video/)
     assert.match(prompt, /# Prompt rewrite/)
-    assert.match(prompt, /Final language check/)
+    assert.match(prompt, /## Language rules/)
   }
 })
 
@@ -46,7 +46,6 @@ test('quality presets are scoped to the long-form skill, not global system prefe
   const prompt = systemPrompt()
   const globalPrompt = prompt.split('## Skills')[0]
   assert.doesNotMatch(globalPrompt, /## Quality preference|Current preference: (?:Custom|High quality|Hobby|Economy)/)
-  assert.match(globalPrompt, /For standalone image or short-video requests/)
   assert.match(prompt, /## Quality presets \(long-form video only\)/)
   assert.match(prompt, /Apply a preset only after the model-preference gate/)
 })

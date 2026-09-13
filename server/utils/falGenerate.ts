@@ -38,7 +38,7 @@ function getFalApiKey() {
   if (!key) {
     throw createError({
       statusCode: 500,
-      statusMessage: 'Fal API key is not configured',
+      statusMessage: 'Media generation is awaiting WaveSpeed migration',
     })
   }
   return key

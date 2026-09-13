@@ -14,22 +14,6 @@ export const VIDEO_EDITOR_PATH = '/tools/reference-to-video'
 
 export const USEFUL_TOOLS: UsefulTool[] = [
   {
-    slug: 'image-text-editor',
-    title: 'Image Text Editor',
-    icon: 'i-lucide-text-cursor-input',
-    description: 'Edit text in images while preserving the original fonts and image details.',
-    to: '/?agentModel=image-text-editor#generator',
-    group: 'Useful tools',
-  },
-  {
-    slug: 'image-layer-splitter',
-    title: 'Image Layer Splitter',
-    icon: 'i-lucide-layers',
-    description: 'Draw boxes around objects to extract them as separate transparent PNG layers.',
-    to: '/?agentModel=image-layer-splitter#generator',
-    group: 'Useful tools',
-  },
-  {
     slug: 'remove-background',
     title: 'Image Background Removal',
     icon: 'i-lucide-eraser',

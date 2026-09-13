@@ -33,7 +33,7 @@ const activeUploadAccept = computed(() => uploadFields.value.find(field => field
   || 'image/jpeg,image/png,image/webp')
 const activeUploadMultiple = computed(() => {
   const field = uploadFields.value.find(entry => entry.key === activeUploadField.value)
-  return (field?.property.maxItems ?? 10) > 1
+  return field?.property.type !== 'string' && (field?.property.maxItems ?? 10) > 1
 })
 function openFilePicker(fieldKey: string) {
   activeUploadField.value = fieldKey
@@ -113,7 +113,7 @@ watch(lockedProjectId, (id) => {
               :label="field.label"
               :items="itemsForField(field.key)"
               :accept="field.property['x-accept'] || 'image/jpeg,image/png,image/webp'"
-              :max-items="field.property.maxItems ?? 10"
+              :max-items="field.property.type === 'string' ? 1 : field.property.maxItems ?? 10"
               @pick="openFilePicker(field.key)"
               @remove="removeUploadedItem(field.key, $event)"
             />

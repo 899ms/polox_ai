@@ -58,11 +58,13 @@ function parseChoiceBody(body: Record<string, unknown>): ChoiceBody {
           return []
         return [{
           questionId,
+          referenceImages: row.referenceImages as { url: string, name: string }[] | undefined,
           textEdits: row.textEdits as import('~~/shared/utils/imageTextEditor').ImageTextEdit[] | undefined,
           textLines: Array.isArray(row.textLines) ? row.textLines as import('~~/shared/utils/imageTextEditor').ImageTextLine[] : undefined,
           optionId: typeof row.optionId === 'string' ? row.optionId : undefined,
           imageUrl: typeof row.imageUrl === 'string' ? row.imageUrl : undefined,
           regions: Array.isArray(row.regions) ? row.regions as number[][] : undefined,
+          annotationEdit: row.annotationEdit as import('~~/shared/utils/imageAnnotations').ImageAnnotationEdit | undefined,
           imageSelections: row.imageSelections as {
             imageUrl: string
             regions: number[][]

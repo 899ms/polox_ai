@@ -8,7 +8,7 @@ export const exportZipTool = {
   type: 'function',
   function: {
     name: EXPORT_ZIP_TOOL,
-    description: 'Package existing successful session images or videos as a ZIP and return a download URL. No new generation is started. Pass exact session asset IDs or URLs; up to 100 files, 120MB per file and 250MB total. Wait for generation to finish before exporting.',
+    description: 'Package existing successful session images or videos as a ZIP and return a download URL. Free — no generation confirmation; no new generation is started. Pass exact session asset IDs or URLs; up to 100 files, 120MB per file and 250MB total. Wait for generation to finish before exporting. Return the actual download URL as a Markdown link; never invent a link. The ZIP is a download, not an image/video generation result.',
     parameters: {
       type: 'object',
       additionalProperties: false,

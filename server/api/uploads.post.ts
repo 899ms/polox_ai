@@ -1,4 +1,3 @@
-import { uploadFalFile } from '../utils/falFiles'
 import { saveMediaFile } from '../utils/localMedia'
 
 const MAX_IMAGE_BYTES = 30 * 1024 * 1024
@@ -54,7 +53,7 @@ export default defineEventHandler(async (event) => {
   }
   const key = `generator/uploads/${crypto.randomUUID()}.${media.extension}`
   const bytes = new Uint8Array(await file.arrayBuffer())
-  await saveMediaFile(key, bytes, file.type)
-  const url = await uploadFalFile(bytes, file.type, `upload.${media.extension}`)
+  // Keep a durable source; the generation provider uploads it just before inference.
+  const url = await saveMediaFile(key, bytes, file.type)
   return { url }
 })

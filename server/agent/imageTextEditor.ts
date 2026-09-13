@@ -2,7 +2,7 @@ import { falReadableUrl } from '../utils/falFiles'
 import type { ImageTextEdit } from '~~/shared/utils/imageTextEditor'
 import type { AgentSession } from './session'
 import type { AskUserArgs } from './types'
-import { validateTextLines } from '~~/shared/utils/imageTextEditor'
+import { IMAGE_TEXT_EDITOR_MODEL, validateTextLines } from '~~/shared/utils/imageTextEditor'
 import { completeText } from './llm'
 import { resolveSessionUrl } from './tools'
 
@@ -77,7 +77,7 @@ export function textEditNeedsSummary(session: AgentSession) {
       answered.add(message.tool_call_id)
     if (message.role === 'assistant' && message.tool_calls?.length) {
       return message.tool_calls.every(call => call.function.name === 'model_image_text_editor' && answered.has(call.id))
-        && message.tool_calls.some(call => session.images.some(image => image.id === call.id && image.modelId === 'gpt-image-2-image-to-image'))
+        && message.tool_calls.some(call => session.images.some(image => image.id === call.id && (image.modelId === IMAGE_TEXT_EDITOR_MODEL || image.modelId === 'gpt-image-2-image-to-image')))
     }
   }
   return false

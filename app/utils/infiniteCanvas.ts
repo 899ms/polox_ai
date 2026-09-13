@@ -141,6 +141,36 @@ export function byCanvasOrder<T extends { id: string, name: string, createdAt?: 
   }).map(({ item }) => item)
 }
 
+// A task is a visual group: oldest task first, results in source order. Each
+// group starts a fresh row, with fixed columns and space for the tallest card.
+export function arrangeCanvasByTask<T extends { id: string, name: string, taskId?: string, createdAt?: string }>(items: T[], positions: Map<string, CanvasRect>): Map<string, CanvasRect> {
+  const groups = new Map<string, T[]>()
+  for (const item of byCanvasOrder(items)) {
+    const rect = positions.get(item.id)
+    if (!rect || rect.hidden)
+      continue
+    const key = item.taskId ? `task:${item.taskId}` : `asset:${item.id}`
+    const group = groups.get(key) || []
+    group.push(item)
+    groups.set(key, group)
+  }
+  const next = new Map(positions)
+  let y = 0
+  for (const group of groups.values()) {
+    for (let start = 0; start < group.length; start += 5) {
+      let rowHeight = 0
+      for (const [column, item] of group.slice(start, start + 5).entries()) {
+        const rect = positions.get(item.id)!
+        const height = (rect.height - CARD_CHROME_HEIGHT) * (CARD_WIDTH - 2) / (rect.width - 2) + CARD_CHROME_HEIGHT
+        next.set(item.id, { ...rect, x: column * CELL_X, y, width: CARD_WIDTH, height })
+        rowHeight = Math.max(rowHeight, height)
+      }
+      y += rowHeight + (start + 5 < group.length ? 40 : 80)
+    }
+  }
+  return next
+}
+
 // Only repair untouched, contiguous default grids. Custom layouts are preserved.
 export function isDefaultCanvasGrid(rects: CanvasRect[]): boolean {
   const slots = new Set<number>()

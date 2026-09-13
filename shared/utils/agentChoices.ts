@@ -20,3 +20,9 @@ export function withCustomChoiceOption<T extends CustomChoiceOption>(options: T[
     custom: true,
   }]
 }
+
+/** Method selection is a standalone checkpoint, including restored cards. */
+export function standaloneImageEditQuestions<T extends { id: string }>(questions: T[]): T[] {
+  const method = questions.find(question => question.id === 'image_edit_method')
+  return method ? [{ ...method, recommendedId: 'annotate' }] : questions
+}

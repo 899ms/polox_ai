@@ -278,7 +278,6 @@ export async function listAgentRuntimes(projectId = '') {
   }
   const docs = await AgentChat.find(filter)
     .sort({ lastEventAt: -1 })
-    .limit(20)
   return docs.map(runtimeFromDoc).filter((item): item is AgentRuntimeSnapshot => Boolean(item))
 }
 export async function upsertAgentRuntime(input: {

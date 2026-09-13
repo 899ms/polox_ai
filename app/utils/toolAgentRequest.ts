@@ -22,7 +22,13 @@ export function toolAgentMessage(content: string) {
     if (!input || typeof input !== 'object' || Array.isArray(input))
       return null
     const mediaFields = [
+      'image',
+      'last_image',
+      'reference_images',
+      'reference_videos',
+      'reference_audios',
       'image_url',
+      'images',
       'image_urls',
       'input_urls',
       'image_input',

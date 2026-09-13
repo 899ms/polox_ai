@@ -1,12 +1,40 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
-const skillsDir = resolve(dirname(fileURLToPath(import.meta.url)), 'skills')
+export function findSkillsDir(moduleUrl = import.meta.url, workingDirectory = process.cwd(), production = process.env.NODE_ENV === 'production') {
+  // Nitro dev can contain a copied skill bundle from an earlier build. Read the
+  // source on each turn in development so edits do not require a rebuild.
+  if (!production) {
+    const source = resolve(workingDirectory, 'server/agent/skills')
+    if (existsSync(resolve(source, 'single-generator.md')))
+      return source
+  }
+  // Source execution, Nitro dev, and bundled server chunks have different locations.
+  let directory = dirname(fileURLToPath(moduleUrl))
+  for (let depth = 0; depth < 6; depth++) {
+    for (const folder of ['skills', 'agent-skills']) {
+      const candidate = resolve(directory, folder)
+      if (existsSync(resolve(candidate, 'single-generator.md')))
+        return candidate
+    }
+    const parent = dirname(directory)
+    if (parent === directory)
+      break
+    directory = parent
+  }
+  return resolve(workingDirectory, 'server/agent/skills')
+}
 
-const FIRST_SKILLS = ['reference-analysis', 'prompt-rewrite', 'result-evaluation', 'long-form-video']
+// Core workflow skills, injected in execution order: plan the model, extract references,
+// compile prompts, run standalone jobs, then evaluate results. The long-form specialty comes
+// last so it only dominates when the task is actually a long-form video. Any remaining skill
+// files are appended alphabetically.
+const FIRST_SKILLS = ['model-planning', 'reference-analysis', 'prompt-rewrite', 'single-generator', 'result-evaluation', 'long-form-video']
 
 export function loadAgentSkills() {
+  const skillsDir = findSkillsDir()
   const blocks: string[] = []
   for (const name of FIRST_SKILLS) {
     try {

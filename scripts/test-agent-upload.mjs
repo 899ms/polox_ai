@@ -6,7 +6,7 @@ import ts from 'typescript';
 function harness(fail = false) {
     const writes = [];
     const source = readFileSync(new URL('../server/agent/upload.ts', import.meta.url), 'utf8').replace(/^import .*\n/gm, '');
-    const context = vm.createContext({ exports: {}, uploadFalFile: async () => 'https://cdn.fal.media/upload.png', crypto: { randomUUID: () => 'unique-upload' }, saveMediaFile: async (...args) => {
+    const context = vm.createContext({ exports: {}, crypto: { randomUUID: () => 'unique-upload' }, saveMediaFile: async (...args) => {
             writes.push(args);
             if (fail)
                 throw new Error('local storage unavailable');
@@ -15,11 +15,11 @@ function harness(fail = false) {
     vm.runInContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, context);
     return { upload: context.exports.uploadAgentImage, writes };
 }
-test('Agent uploads the original bytes to local storage and returns a fal CDN URL', async () => {
+test('Agent uploads the original bytes to local storage and returns a durable local URL without provider credentials', async () => {
     const h = harness();
     const bytes = new Uint8Array([1, 2, 3]);
     const url = await h.upload('session-1', { bytes, mime: 'image/png' });
-    assert.equal(url, 'https://cdn.fal.media/upload.png');
+    assert.equal(url, 'https://media.example.com/agent-lab/session-1/unique-upload.png');
     assert.equal(h.writes[0][1], bytes);
     assert.equal(h.writes[0][2], 'image/png');
 });
@@ -34,17 +34,33 @@ test('local storage failure is surfaced without another upload destination', asy
     await assert.rejects(h.upload('session-1', { bytes: new Uint8Array(1), mime: 'image/png' }), /local storage unavailable/);
     assert.equal(h.writes.length, 1);
 });
-test('upload handler records the fal CDN URL as the session attachment', async () => {
+test('upload handler records the local URL as the session attachment', async () => {
     const source = readFileSync(new URL('../server/agent/loop.ts', import.meta.url), 'utf8');
     const tree = ts.createSourceFile('loop.ts', source, ts.ScriptTarget.Latest, true);
     const fn = tree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'handleUpload');
     const session = { id: 'session' };
     let recorded;
     const h = harness();
-    const context = vm.createContext({ exports: {}, uploadFalFile: async () => 'https://cdn.fal.media/upload.png', crypto: { randomUUID: () => 'image-id' }, resolveChatSession: async () => session, uploadAgentImage: h.upload, upsertImage: (target, image) => { assert.equal(target, session); recorded = image; } });
+    const context = vm.createContext({ exports: {}, crypto: { randomUUID: () => 'image-id' }, resolveChatSession: async () => session, uploadAgentImage: h.upload, upsertImage: (target, image) => { assert.equal(target, session); recorded = image; } });
     vm.runInContext(ts.transpileModule(fn.getText(tree), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, context);
     const response = await context.exports.handleUpload(session.id, { bytes: new Uint8Array([1]), fileName: 'original.png', mime: 'image/png' });
-    assert.equal(response.image.url, 'https://cdn.fal.media/upload.png');
+    assert.equal(response.image.url, 'https://media.example.com/agent-lab/session/unique-upload.png');
     assert.equal(recorded.url, response.image.url);
     assert.equal(recorded.kind, 'upload');
+});
+
+test('session recovery seals only actual tool calls, never uploaded or imported images', () => {
+    const source = readFileSync(new URL('../server/agent/loop.ts', import.meta.url), 'utf8');
+    const tree = ts.createSourceFile('loop.ts', source, ts.ScriptTarget.Latest, true);
+    const fn = tree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'sealOpenToolResultsFromImages');
+    const session = { messages: [{ role: 'assistant', tool_calls: [{ id: 'generation' }] }], images: [
+        { id: 'upload', kind: 'upload', status: 'success' },
+        { id: 'imported', kind: 'still', status: 'success' },
+        { id: 'generation', kind: 'still', status: 'success' },
+    ] };
+    const appended = [];
+    const context = vm.createContext({ exports: {}, requireSession: () => session, answeredToolCallIds: () => new Set(), toolResultFromImage: () => 'result', appendToolResult: (_session, id) => appended.push(id), touch: () => {} });
+    vm.runInContext(ts.transpileModule(fn.getText(tree), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, context);
+    assert.equal(context.exports.sealOpenToolResultsFromImages('session'), true);
+    assert.deepEqual(appended, ['generation']);
 });

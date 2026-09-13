@@ -12,7 +12,7 @@ export interface IResultAsset {
 }
 export interface IGenerationJob {
   projectId: string
-  provider: 'fal'
+  provider: 'fal' | 'wavespeed'
   model: string
   category: string
   task: string

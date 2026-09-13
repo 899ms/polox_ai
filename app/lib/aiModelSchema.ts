@@ -75,7 +75,7 @@ const UPLOAD_FIELD_KEYS = new Set([
 ])
 
 function resolvePlacement(key: string, property: SchemaProperty): FieldPlacement {
-  if (property.disabled || AUTO_VALUE_FIELD_KEYS.has(key))
+  if (property.disabled || property['x-ui-component'] === 'hidden' || AUTO_VALUE_FIELD_KEYS.has(key))
     return 'hidden'
 
   if (key === 'prompt' || property['x-ui-component'] === 'uploaders' || UPLOAD_FIELD_KEYS.has(key))
@@ -116,7 +116,6 @@ function resolveWidget(key: string, property: SchemaProperty, placement: FieldPl
 }
 
 function resolveDefaultValue(key: string, property: SchemaProperty, widget: FieldWidget) {
-
   if (property.default !== undefined)
     return property.default
 
@@ -210,4 +209,15 @@ export function isFormValid(fields: FieldConfig[], values: AiFormValues) {
 
     return value !== undefined && value !== null && value !== ''
   })
+}
+
+export function createModelInput(fields: FieldConfig[], values: AiFormValues): AiFormValues {
+  return Object.fromEntries(fields.flatMap((field) => {
+    let value = values[field.key]
+    if (field.widget === 'upload' && field.property.type === 'string' && Array.isArray(value))
+      value = value[0]
+    if (value === undefined || value === '' || (Array.isArray(value) && !value.length))
+      return []
+    return [[field.key, value]]
+  }))
 }

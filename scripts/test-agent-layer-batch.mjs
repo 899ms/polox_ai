@@ -1,3 +1,4 @@
+import { standaloneImageEditQuestions } from '../shared/utils/agentChoices.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
@@ -27,6 +28,7 @@ test('switching image tabs preserves boxes and submits both images through the H
     defineProps: () => props,
     withDefaults: value => value,
     defineEmits: () => (...event) => events.push(event),
+    standaloneImageEditQuestions,
     withCustomChoiceOption: options => options,
     validateLayerSelection,
     validateLayerSelections,

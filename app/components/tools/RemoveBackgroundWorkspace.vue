@@ -153,7 +153,7 @@ async function handleRun() {
   isSubmitting.value = true
   try {
     await startToolAgent(toolModel.value, {
-      image_url: props.layerSplitter ? readyUrl.value : [readyUrl.value],
+      ...(props.layerSplitter ? { image_url: readyUrl.value } : { image: readyUrl.value }),
       ...(props.layerSplitter ? { regions: regions.value } : {}),
     })
   }

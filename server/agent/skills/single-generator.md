@@ -2,6 +2,8 @@
 
 Use this skill when the user invokes a generator for a standalone image, edit, cutout, layer split, or single video clip, especially through an explicit model name or @[Name](model:id). Follow model-planning for exact model selection and schema validation. For a long film, storyboard, or multi-shot production, use long-form-video instead; do not add a second set of standalone checkpoints to its intermediate generations.
 
+For edits to an existing image, follow image-editing first. The editing method card contains only `image_edit_method`, never editing-goal, creative-direction, or parameter questions. This overrides batching unresolved questions at this checkpoint.
+
 ## Check the brief before generation
 
 Read the selected tool's input schema and reuse the user's instructions, previous answers, and designated session media. An @ mention selects the model and task; it does not specify a subject, visual style, or output settings.
@@ -18,7 +20,7 @@ A schema default alone does not settle a missing creative choice or the image/vi
 
 ## Image Text Editor
 
-For `image-text-editor`, request an upload if no source exists. Call `model_image_text_editor` to use the LLM to identify every visible text line and its approximate location in words. Do not detect coordinates or call an OCR model. Open the inline editor with exactly one input per detected line. When multiple images are uploaded together, detect each one and show a single editor with thumbnail switching, keeping each image’s text edits separate. On submission the runtime creates exactly one job per changed image in one confirmation batch. Skip unchanged images; do not re-detect or re-submit the batch. A detection failure on one image must not discard the other images. The backend sends the full original image directly to GPT Image 2 with instructions such as "At the upper left, change X to Y". Return the complete generated output without cropping or local compositing. Use the existing confirmation policy. A cancellation stops this workflow.
+For `image-text-editor`, request an upload if no source exists. Call `model_image_text_editor` to use the LLM to identify every visible text line and its approximate location in words. Do not detect coordinates or call an OCR model. Open the inline editor with exactly one input per detected line. When multiple images are uploaded together, detect each one and show a single editor with thumbnail switching, keeping each image’s text edits separate. On submission the runtime creates exactly one job per changed image in one confirmation batch. Skip unchanged images; do not re-detect or re-submit the batch. A detection failure on one image must not discard the other images. The backend sends the full original image directly to GPT Image 2.5 Sunburst with instructions such as "At the upper left, change X to Y". Return the complete generated output without cropping or local compositing. Use the existing confirmation policy. A cancellation stops this workflow.
 
 ## Image Layer Splitter: resolve unspecified layers
 
@@ -51,7 +53,7 @@ Batch related unresolved choices into one **ask_user** call, usually one to four
 - Use stable question ids such as `creative_direction`, `aspect_ratio`, `resolution`, `duration`, and `sound_format`.
 - Offer two or three concrete, distinct choices per question, or fewer if the schema permits fewer. Put the best fit first and set `recommended` to its option id. Briefly explain the effect of each choice. Adapt creative proposals to this request; do not reuse a generic menu for every subject.
 - Include an **Other** option with `allow_custom: true` in every question. Accept custom intent, but validate custom parameter values against the selected schema before generating. If incompatible, explain the constraint and offer legal alternatives; do not silently clamp the user's choice.
-- Use the user's preferred language for the introduction, recommendation, titles, questions, labels, and descriptions. Keep parameter keys and actual enum values in API format. Write production prompts in English while preserving requested on-image text and quoted speech in their chosen languages.
+- Follow the system language rules for card text. Keep parameter keys and actual enum values in API format. Write production prompts in English while preserving requested on-image text and quoted speech in their chosen languages.
 - Show choices through the card, not a duplicate markdown list. Include a short top-level recommendation explaining what you will choose if they skip.
 - Stop until the card is answered or explicitly skipped. Do not mix **ask_user** with generation or `concat_videos` in the same turn. Silence, an unanswered card, and Automatic generation confirmation are not delegation.
 

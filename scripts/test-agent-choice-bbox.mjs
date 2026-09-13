@@ -4,10 +4,10 @@ import { test } from 'node:test'
 import vm from 'node:vm'
 import ts from 'typescript'
 import { confirmedLayerSelection } from '../server/agent/layerSplitBrief.ts'
-import { withCustomChoiceOption } from '../shared/utils/agentChoices.ts'
+import { standaloneImageEditQuestions, withCustomChoiceOption } from '../shared/utils/agentChoices.ts'
 import { validateLayerSelection } from '../shared/utils/agentLayerSelection.ts'
 
-const context = vm.createContext({ validateLayerSelection, withCustomChoiceOption })
+const context = vm.createContext({ standaloneImageEditQuestions, validateLayerSelection, withCustomChoiceOption })
 for (const [path, name] of [['../server/agent/router.ts', 'parseChoiceBody'], ['../server/agent/loop.ts', 'formatChoiceResult']]) {
   const text = readFileSync(new URL(path, import.meta.url), 'utf8')
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true)

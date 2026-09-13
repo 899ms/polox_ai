@@ -58,7 +58,7 @@ function validInput(model) {
                 raw[key] = [[10, 20, 500, 600]];
             else if (prop.type === 'array')
                 raw[key] = [source];
-            else if (key.includes('url'))
+            else if (key.includes('url') || prop['x-ui-component'] === 'uploaders')
                 raw[key] = source;
             else if (prop.enum)
                 raw[key] = prop.enum[0];
@@ -69,10 +69,8 @@ function validInput(model) {
         }
     }
     // Reference models require at least one source across optional media arrays.
-    if (model.task === 'Reference to Video')
-        raw[schema.properties.image_urls ? 'image_urls' : 'reference_image_urls'] = [source];
-    if (model.id === 'minimax-h3/image-to-video')
-        raw.image_url = source;
+    if (model.task === 'Reference to Video' && !schema.properties.video)
+        raw[schema.properties.reference_images ? 'reference_images' : schema.properties.image_urls ? 'image_urls' : 'reference_image_urls'] = [source];
     return raw;
 }
 const emitted = [];
@@ -87,7 +85,7 @@ const api = load('server/agent/models.ts', {
 }, { console });
 test('every website model has a unique valid tool and matching required parameters', () => {
     const website = load('shared/constants/aiModels.ts').AI_MODELS;
-    assert.equal(registry.AGENT_MODELS.length, website.length + 2);
+    assert.equal(registry.AGENT_MODELS.length, website.length + 3);
     assert.equal(new Set(registry.registeredModelTools.map(tool => tool.function.name)).size, registry.AGENT_MODELS.length);
     for (const model of website) {
         const tool = registry.registeredModelTools.find(tool => tool.function.name === registry.agentModelToolName(model.id));
@@ -97,7 +95,7 @@ test('every website model has a unique valid tool and matching required paramete
             assert.ok(key in tool.function.parameters.properties);
     }
 });
-for (const model of registry.AGENT_MODELS.filter(model => model.id !== 'image-text-editor')) {
+for (const model of registry.AGENT_MODELS.filter(model => !['image-text-editor', 'sketch-to-image'].includes(model.id))) {
     test(`${model.id}: validated parameters preserve the correct model identity`, async () => {
         const args = await api.prepareModelGeneration(registry.agentModelToolName(model.id), JSON.stringify(validInput(model)), session());
         assert.equal(args.modelId, model.id);
@@ -109,13 +107,13 @@ for (const model of registry.AGENT_MODELS.filter(model => model.id !== 'image-te
 test('missing source media is rejected before any generation', async () => {
     const model = registry.AGENT_MODELS.find(model => model.id === 'gpt-image-2-image-to-image');
     const raw = validInput(model);
-    delete raw.image_urls;
-    await assert.rejects(api.prepareModelGeneration(registry.agentModelToolName(model.id), JSON.stringify(raw), session()), /required property 'image_urls'/);
+    delete raw.images;
+    await assert.rejects(api.prepareModelGeneration(registry.agentModelToolName(model.id), JSON.stringify(raw), session()), /required property 'images'/);
 });
 test('defaults fill settings but never fabricate required media', () => {
     const model = registry.AGENT_MODELS.find(model => model.id === 'gpt-image-2-text-to-image');
     const input = registry.validateAgentModelInput(model, { prompt: 'A quiet lake at sunset' });
-    assert.equal(input.image_size, model.schema.components.schemas.Input.properties.image_size.default);
+    assert.equal(input.resolution, model.schema.components.schemas.Input.properties.resolution.default);
     assert.throws(() => registry.validateAgentModelInput(model, { prompt: 'A lake', quality: 'unsupported' }), /allowed values/);
     assert.throws(() => registry.validateAgentModelInput(model, { prompt: 'A lake', invented: true }), /additional properties/);
 });
@@ -136,10 +134,10 @@ test('session media IDs resolve to real URLs and invalid IDs fail', async () => 
     const model = registry.AGENT_MODELS.find(model => model.id === 'gpt-image-2-image-to-image');
     const s = session();
     s.images = [{ id: 'image-1', kind: 'still', status: 'success', url: source }];
-    const raw = { ...validInput(model), image_urls: ['image-1'] };
+    const raw = { ...validInput(model), images: ['image-1'] };
     const args = await api.prepareModelGeneration(registry.agentModelToolName(model.id), JSON.stringify(raw), s);
-    assert.equal(args.input.image_urls[0], source);
-    raw.image_urls = ['missing-image'];
+    assert.equal(args.input.images[0], source);
+    raw.images = ['missing-image'];
     await assert.rejects(api.prepareModelGeneration(registry.agentModelToolName(model.id), JSON.stringify(raw), s), /Missing media/);
 });
 test('registered generation uses normal provider pipeline and preserves every output', async () => {
@@ -148,7 +146,7 @@ test('registered generation uses normal provider pipeline and preserves every ou
     const args = await api.prepareModelGeneration(registry.agentModelToolName(model.id), JSON.stringify(validInput(model)), s);
     const result = JSON.parse(await api.runModelGeneration(s, 'call-1', args, event => emitted.push(event)));
     assert.equal(slotArgs.meta.modelId, model.id);
-    assert.equal(slotArgs.meta.requestModel, 'openai/gpt-image-2');
+    assert.equal(slotArgs.meta.requestModel, 'openai/gpt-image-2/text-to-image');
     assert.equal(slotArgs.meta.modelInput.prompt, args.input.prompt);
     assert.equal(result.urls.length, 2);
     assert.equal(s.images.filter(image => image.status === 'success').length, 2);
@@ -170,13 +168,14 @@ function loopHarness(responses, initial, prose = {}) {
     const generationRequests = [];
     const llmRequests = [];
     const detectionRequests = [];
-    const mocks = Object.fromEntries(['./concat', './fal', './modelGeneration', './restore', './resume', './slots', '../utils/agentChats'].map(id => [id, {}]));
+    const mocks = Object.fromEntries(['./annotationReferences', './concat', './fal', './modelGeneration', './restore', './resume', './slots', '../utils/agentChats'].map(id => [id, {}]));
     const loop = load('server/agent/loop.ts', {
         ...mocks,
         '../utils/agentChats': { snapshotAgentChatFromService: async () => { } },
+        './annotationReferences': { validateProjectImageReferences: async urls => { if (urls.some(url => !s.images.some(image => image.url === url && image.status === 'success'))) throw new Error('Reference image is not available'); } },
         './models': { ...api, runModelGeneration: async (_session, callId, args) => {
                 generationRequests.push({ callId, args });
-                const failed = Boolean(s.failLayerUrl && (args.input.image_url === s.failLayerUrl || args.input.image_urls?.includes(s.failLayerUrl)));
+                const failed = Boolean(s.failLayerUrl && (args.input.image === s.failLayerUrl || args.input.images?.includes(s.failLayerUrl)));
                 s.images.push({ id: callId, modelId: args.modelId, status: failed ? 'fail' : 'success', error: failed ? 'Image dimensions are too small' : '', url: failed ? '' : `https://example.com/${callId}.png` });
                 return JSON.stringify(failed ? { ok: false, error: 'Image dimensions are too small' } : { ok: true, model: args.modelId, urls: [`https://example.com/${callId}.png`] });
             } },
@@ -216,7 +215,7 @@ test('Agent loop queues the exact selected model and full parameters for confirm
 test('missing required media returns to the Agent for clarification without a generation confirmation', async () => {
     const model = registry.AGENT_MODELS.find(model => model.id === 'gpt-image-2-image-to-image');
     const raw = validInput(model);
-    delete raw.image_urls;
+    delete raw.images;
     const h = loopHarness([[call(model, raw)], [{ id: 'ask-1', type: 'function', function: { name: 'ask_user', arguments: JSON.stringify({ questions: [{ id: 'source', prompt: 'Which existing image should I edit?', options: [{ id: 'last', label: 'The previous result' }, { id: 'custom', label: 'Other', allow_custom: true }] }] }) } }]]);
     await h.run();
     assert.equal(h.s.pendingConfirmation, null);
@@ -246,7 +245,7 @@ test('multiple layer selections prepare distinct source jobs with their own conf
     for (const refs of [urls, ['source-0', 'source-1']]) {
         const jobs = await Promise.all(refs.map(image_url => api.prepareModelGeneration(tool, JSON.stringify({ image_url, regions: [[0, 0, 1000, 1000]] }), s)));
         for (const [i, job] of jobs.entries()) {
-            assert.equal(job.input.image_url, urls[i]);
+            assert.equal(job.input.image, urls[i]);
             assert.deepEqual([...job.input.prompt.matchAll(/<bbox>(.*?)<\/bbox>/g)].map(match => match[1].split(' ').map(Number)), boxes[i]);
             assert.deepEqual(Array.from(job.inputUrls), [urls[i]]);
             assert.equal(api.modelConfirmation(job).inputUrls[0], urls[i]);
@@ -256,7 +255,7 @@ test('multiple layer selections prepare distinct source jobs with their own conf
     await assert.rejects(api.prepareModelGeneration(tool, JSON.stringify({ image_url: 'https://example.com/unconfirmed.png', regions: boxes[0] }), s), /source image with confirmed boxes/);
     s.messages.pop();
     const single = await api.prepareModelGeneration(tool, '{}', s);
-    assert.equal(single.input.image_url, source);
+    assert.equal(single.input.image, source);
 });
 test('text editor requires confirmed user edits and maps them to direct full-image GPT editing', async () => {
     const s = session();
@@ -267,12 +266,13 @@ test('text editor requires confirmed user edits and maps them to direct full-ima
     for (const quality of ['economy', 'high', 'hobby', 'custom']) {
         s.quality = quality;
         const args = await api.prepareModelGeneration('model_image_text_editor', JSON.stringify({ image_url: 'ignored-model-url' }), s);
-        assert.equal(args.modelId, 'gpt-image-2-image-to-image');
-        assert.equal(args.input.image_size, 'auto');
-        assert.equal(api.modelConfirmation(args).modelName, 'GPT Image 2');
-        assert.equal(args.requestModel, 'openai/gpt-image-2/edit');
+        assert.equal(args.modelId, 'gpt-image-2-5-sunburst-image-to-image');
+        assert.equal(args.input.aspect_ratio, undefined);
+        assert.equal(api.modelConfirmation(args).modelName, 'GPT Image 2.5 Sunburst');
+        assert.equal(args.requestModel, 'openai/gpt-image-2.5-sunburst/edit');
         assert.equal(args.input.quality, 'high');
-        assert.equal(args.input.image_urls[0], source);
+        assert.equal(args.input.resolution, '1k');
+        assert.equal(args.input.images[0], source);
         assert.equal(args.input._textEdit, undefined);
         assert.match(args.input.prompt, /At "upper left", change "Hello" to "你好"/);
     }
@@ -305,7 +305,7 @@ for (const confirmPolicy of ['always', 'auto']) {
         }
         assert.equal(h.generationRequests.length, 2);
         assert.equal(new Set(h.generationRequests.map(request => request.callId)).size, 2);
-        assert.deepEqual(h.generationRequests.map(request => request.args.input.image_url), imageSelections.map(selection => selection.imageUrl));
+        assert.deepEqual(h.generationRequests.map(request => request.args.input.image), imageSelections.map(selection => selection.imageUrl));
     });
 }
 test('a partial layer failure cannot trigger a second split, even if the summary model calls tools', async () => {
@@ -341,9 +341,9 @@ test('text submission queues GPT directly and saves a full-image edit without a 
     assert.equal(h.llmRequests.length, 0);
     const pending = h.s.pendingConfirmation;
     assert.equal(pending.payload.count, 1);
-    assert.equal(pending.payload.jobs[0].modelName, 'GPT Image 2');
+    assert.equal(pending.payload.jobs[0].modelName, 'GPT Image 2.5 Sunburst');
     const args = JSON.parse(pending.items[0].argsJson);
-    assert.equal(args.modelId, 'gpt-image-2-image-to-image');
+    assert.equal(args.modelId, 'gpt-image-2-5-sunburst-image-to-image');
     assert.match(args.input.prompt, /At "upper left", change "Hello" to "你好"/);
     assert.doesNotMatch(args.input.prompt, /"Keep"|bbox|coordinates|crop/);
     assert.equal(args.input._textEdit, undefined);
@@ -365,7 +365,7 @@ for (const confirmPolicy of ['always', 'auto']) {
         await h.choice({ choiceId: 'batch-edit', action: 'submit', answers: [{ questionId: 'image_text_editor', textEdits: changed }] });
         const confirmation = h.events.find(event => event.type === 'confirmation').confirmation;
         assert.equal(confirmation.count, 2);
-        assert.ok(confirmation.jobs.every(job => job.modelName === 'GPT Image 2'));
+        assert.ok(confirmation.jobs.every(job => job.modelName === 'GPT Image 2.5 Sunburst'));
         assert.deepEqual(Array.from(confirmation.jobs, job => job.inputUrls[0]), changed.map(edit => edit.imageUrl));
         if (confirmPolicy === 'always') {
             assert.equal(h.llmRequests.length, 0);
@@ -375,11 +375,11 @@ for (const confirmPolicy of ['always', 'auto']) {
         assert.equal(h.generationRequests.length, 2);
         assert.equal(new Set(h.generationRequests.map(request => request.callId)).size, 2);
         h.generationRequests.forEach(({ args }, index) => {
-            assert.deepEqual(Array.from(args.input.image_urls), [changed[index].imageUrl]);
+            assert.deepEqual(Array.from(args.input.images), [changed[index].imageUrl]);
             assert.match(args.input.prompt, new RegExp(`At "location ${index}", change "Original ${index}" to "Replacement ${index}"`));
             assert.doesNotMatch(args.input.prompt, new RegExp(`Original ${1 - index}`));
         });
-        assert.equal(h.s.images.filter(image => image.modelId === 'gpt-image-2-image-to-image' && image.status === 'success').length, 2);
+        assert.equal(h.s.images.filter(image => image.modelId === 'gpt-image-2-5-sunburst-image-to-image' && image.status === 'success').length, 2);
         assert.equal(h.s.pendingConfirmation, null);
         assert.equal(h.llmRequests.length, 1);
         assert.equal(h.llmRequests[0].disableTools, true);
@@ -392,7 +392,7 @@ test('a confirmed batch cannot borrow another image draft, including when only o
     s.messages = [{ role: 'tool', content: JSON.stringify({ ok: true, textEdits: [{ imageUrl: source, lines: [{ original: 'Hello', text: 'Hi', location: 'top' }] }] }) }];
     await assert.rejects(api.prepareModelGeneration('model_image_text_editor', JSON.stringify({ image_url: 'https://example.com/other.png' }), s), /confirm edits/);
     const args = await api.prepareModelGeneration('model_image_text_editor', JSON.stringify({ image_url: 'upload' }), s);
-    assert.equal(args.input.image_urls[0], source);
+    assert.equal(args.input.images[0], source);
 });
 test('multiple editor tool calls open one card and detect each attachment only once', async () => {
     const model = registry.AGENT_MODELS.find(model => model.id === 'image-text-editor');
@@ -412,3 +412,184 @@ test('multiple editor tool calls open one card and detect each attachment only o
     assert.equal(h.s.pendingConfirmation.items.length, 2);
     assert.equal(h.detectionRequests.length, 2, 'Submission must not detect again');
 });
+
+function sketchRequest() {
+  const model = registry.AGENT_MODELS.find(model => model.id === 'sketch-to-image')
+  return { role: 'user', content: [{ type: 'text', text: registry.modelMention(model) }, { type: 'image_url', image_url: { url: source } }] }
+}
+function sketchAnswer(questionId, optionId, extra = {}, prompt = 'Preserve its composition. 水彩风格 watercolor cottage') {
+  const id = `ask-${questionId}-${Math.random()}`
+  return [
+    { role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'ask_user', arguments: JSON.stringify({ questions: [{ id: questionId, prompt }] }) } }] },
+    { role: 'tool', tool_call_id: id, content: JSON.stringify({ ok: true, answers: [{ questionId, optionId, ...extra }], ...(questionId === 'sketch_understanding' && optionId === 'correct' ? { confirmedUnderstanding: prompt } : {}) }) },
+  ]
+}
+function approvedSketch() {
+  return [sketchRequest(), ...sketchAnswer('sketch_references', 'no'), ...sketchAnswer('sketch_understanding', 'correct')]
+}
+test('Sketch accepts the prompt composed after understanding confirmation and preserves the selected images', async () => {
+  const s = session()
+  s.messages = approvedSketch()
+  const prompt = 'Create a watercolor cottage preserving the sketch composition and the requested lettering.'
+  const args = await api.prepareModelGeneration('model_sketch_to_image', JSON.stringify({ images: ['https://example.com/unselected.png'], prompt, resolution: '2k' }), s)
+  assert.equal(args.modelId, 'gpt-image-2-5-flare-image-to-image')
+  assert.equal(args.requestModel, 'openai/gpt-image-2.5-flare/edit')
+  assert.equal(args.input.images[0], source)
+  assert.equal(args.input.images.length, 1)
+  assert.equal(args.input.prompt, prompt)
+  assert.equal(api.modelConfirmation(args).modelName, 'GPT Image 2.5 Flare')
+  await assert.rejects(api.prepareModelGeneration('model_gpt_image_2_5_sunburst_image_to_image', '{}', s), /model_sketch_to_image/)
+})
+test('Sketch blocks missing source, unfinished steps, direct backend bypass, adjustment and cancellation', async () => {
+  const s = session()
+  await assert.rejects(api.prepareModelGeneration('model_sketch_to_image', '{}', s), /Save a sketch/)
+  s.messages = [sketchRequest()]
+  for (const tool of ['model_sketch_to_image', 'model_gpt_image_2_5_flare_image_to_image'])
+    await assert.rejects(api.prepareModelGeneration(tool, '{}', s), /confirm sketch_understanding/)
+  s.messages = approvedSketch()
+  s.messages.push(...sketchAnswer('sketch_understanding', 'adjust', { text: 'Make it blue' }))
+  await assert.rejects(api.prepareModelGeneration('model_sketch_to_image', '{}', s), /confirm sketch_understanding/)
+  s.messages = approvedSketch()
+  s.messages.push(...sketchAnswer('sketch_prompt', 'cancel'))
+  await assert.rejects(api.prepareModelGeneration('model_sketch_to_image', '{}', s), /confirm sketch_understanding/)
+})
+
+
+function sketchAsk(id, prompt = 'Question') {
+  const options = id === 'sketch_prompt' ? ['send', 'adjust', 'cancel'] : id === 'sketch_understanding' ? ['correct', 'adjust'] : ['yes', 'no']
+  return { id: `call-${id}-${Math.random()}`, type: 'function', function: { name: 'ask_user', arguments: JSON.stringify({ questions: [{ id, prompt, options: options.map(id => ({ id, label: id, ...(id === 'adjust' ? { allow_custom: true } : {}) })) }] }) } }
+}
+test('Sketch inspects all images, confirms corrections, then submits directly without more creative checkpoints', async () => {
+  const ref = 'https://example.com/reference.png'
+  const initialRef = 'https://example.com/initial-reference.png'
+  const model = registry.AGENT_MODELS.find(model => model.id === 'sketch-to-image')
+  const understanding = 'I understand the sketch as a cottage centered in the frame, with a tall tree on the left. The initial reference supplies the cottage architecture; the added reference supplies the color palette. The drawn lettering appears to be a title above the roof, rather than an instruction to change the chat language. Is this understanding correct?'
+  const corrected = understanding.replace('tall tree', 'signpost')
+  const prompt = 'Draw a cottage using sketch composition and reference colors. Include the confirmed signpost on the left and the title above the roof.'
+  const request = sketchRequest()
+  request.content.push({ type: 'image_url', image_url: { url: initialRef } })
+  const h = loopHarness([
+    [sketchAsk('sketch_references')],
+    [sketchAsk('sketch_understanding', understanding)],
+    [sketchAsk('sketch_understanding', corrected)],
+    [call(model, { prompt, images: ['https://example.com/wrong.png'] })],
+  ], { messages: [request], images: [source, initialRef, ref].map((url, index) => ({ id: String(index), url, kind: 'upload', status: 'success' })) })
+  await h.run()
+  const answer = async (questionId, optionId, extra = {}) => h.choice({ action: 'submit', choiceId: h.s.pendingChoice.payload.id, answers: [{ questionId, optionId, ...extra }] })
+  await answer('sketch_references', 'yes', { referenceImages: [{ url: ref, name: 'Colors' }] })
+  assert.equal(h.s.pendingChoice.payload.questions[0].id, 'sketch_understanding')
+  assert.equal(h.s.pendingChoice.payload.questions[0].prompt, understanding, 'The complete visual interpretation must not be truncated to a short question')
+  assert.deepEqual(Array.from(h.s.pendingChoice.payload.questions[0].options, option => [option.id, option.custom]), [['correct', false], ['adjust', true]])
+  const firstReview = h.llmRequests.at(-1).messages.findLast(message => message.internal && Array.isArray(message.content))
+  assert.deepEqual(Array.from(firstReview.content.filter(part => part.type === 'image_url'), part => part.image_url.url), [source, initialRef, ref], 'The LLM must receive all actual images before describing its understanding')
+  await answer('sketch_understanding', 'adjust', { text: 'The shape on the left is a signpost, not a tree.' })
+  assert.equal(h.s.pendingChoice.payload.questions[0].id, 'sketch_understanding')
+  assert.equal(h.s.pendingChoice.payload.questions[0].prompt, corrected)
+  assert.ok(h.llmRequests.at(-1).messages.some(message => message.role === 'tool' && message.content.includes('The shape on the left is a signpost')))
+  await assert.rejects(api.prepareModelGeneration('model_sketch_to_image', '{}', h.s), /confirm sketch_understanding/)
+  await answer('sketch_understanding', 'correct')
+  assert.equal(h.s.pendingChoice, null)
+  assert.equal(h.llmRequests.at(-1).requiredTool, 'model_sketch_to_image')
+  const confirmed = h.s.messages.filter(message => message.role === 'tool').map(message => JSON.parse(message.content)).find(result => result.confirmedUnderstanding)
+  assert.equal(confirmed.confirmedUnderstanding, corrected)
+  const review = h.s.messages.findLast(message => message.internal && Array.isArray(message.content))
+  assert.deepEqual([...review.content.filter(part => part.type === 'image_url').map(part => part.image_url.url)], [source, initialRef, ref])
+  assert.equal(h.generationRequests.length, 0)
+  assert.equal(h.s.pendingConfirmation.payload.params.prompt, prompt)
+  assert.deepEqual([...h.s.pendingConfirmation.payload.params.modelInput.images], [source, initialRef, ref])
+  assert.deepEqual(h.events.filter(event => event.type === 'choice').map(event => event.choice.questions[0].id), ['sketch_references', 'sketch_understanding', 'sketch_understanding'])
+})
+test('Sketch refuses out-of-order cards and empty Yes answers without consuming the pending step', async () => {
+  const h = loopHarness([[sketchAsk('sketch_notes')], [sketchAsk('sketch_references')]], { messages: [sketchRequest()], images: [] })
+  await h.run()
+  assert.equal(h.s.pendingChoice.payload.questions[0].id, 'sketch_references')
+  const choiceId = h.s.pendingChoice.payload.id
+  await assert.rejects(h.choice({ action: 'submit', choiceId, answers: [{ questionId: 'sketch_references', optionId: 'yes', referenceImages: [] }] }), /between 1 and 8/)
+  assert.equal(h.s.pendingChoice.payload.id, choiceId)
+  assert.equal(h.generationRequests.length, 0)
+})
+
+test('Sketch Correct generates once with automatic confirmation without any further question', async () => {
+  const model = registry.AGENT_MODELS.find(model => model.id === 'sketch-to-image')
+  const prompt = 'A finished cottage illustration based on the confirmed sketch.'
+  const h = loopHarness([
+    [sketchAsk('sketch_references')],
+    [sketchAsk('sketch_understanding', 'A cottage in the center. Confirm to generate the image.')],
+    [call(model, { prompt, images: [source] })],
+    [call(model, { prompt: 'Unrequested repeat', images: [source] }, 'repeat')],
+  ], { messages: [sketchRequest()], confirmPolicy: 'auto' })
+  await h.run()
+  assert.equal(h.llmRequests[0].requiredTool, 'ask_user')
+  await h.choice({ action: 'skip', choiceId: h.s.pendingChoice.payload.id })
+  const review = h.llmRequests.at(-1).messages.findLast(message => message.internal && Array.isArray(message.content))
+  assert.deepEqual(Array.from(review.content.filter(part => part.type === 'image_url'), part => part.image_url.url), [source])
+  await h.choice({ action: 'submit', choiceId: h.s.pendingChoice.payload.id, answers: [{ questionId: 'sketch_understanding', optionId: 'correct' }] })
+  assert.equal(h.s.pendingChoice, null)
+  assert.equal(h.s.pendingConfirmation, null)
+  assert.equal(h.generationRequests.length, 1)
+  assert.equal(h.generationRequests[0].args.input.prompt, prompt)
+  assert.deepEqual(Array.from(h.generationRequests[0].args.input.images), [source])
+  assert.equal(h.llmRequests[2].requiredTool, 'model_sketch_to_image')
+  assert.equal(h.llmRequests.at(-1).disableTools, true)
+  assert.deepEqual(h.events.filter(event => event.type === 'choice').map(event => event.choice.questions[0].id), ['sketch_references', 'sketch_understanding'])
+})
+
+test('Sketch rejects extra questions after Correct and proceeds to generation instead', async () => {
+  const model = registry.AGENT_MODELS.find(model => model.id === 'sketch-to-image')
+  const h = loopHarness([
+    [sketchAsk('sketch_notes')],
+    [sketchAsk('sketch_prompt')],
+    [call(model, { prompt: 'A cottage from the confirmed sketch.', images: [source] })],
+  ], { messages: approvedSketch() })
+  await h.run()
+  assert.equal(h.s.pendingChoice, null)
+  assert.ok(h.s.pendingConfirmation)
+  assert.equal(h.events.filter(event => event.type === 'choice').length, 0)
+  assert.ok(h.s.messages.some(message => message.role === 'tool' && message.content.includes('do not ask for further confirmation')))
+})
+
+test('Sketch cannot skip understanding or consume an empty correction, and cannot jump ahead to notes or generation', async () => {
+  const h = loopHarness([
+    [sketchAsk('sketch_references')],
+    [sketchAsk('sketch_notes')],
+    [sketchAsk('sketch_understanding', 'A cottage with a signpost. Is this understanding correct?')],
+  ], { messages: [sketchRequest()] })
+  await h.run()
+  await h.choice({ action: 'submit', choiceId: h.s.pendingChoice.payload.id, answers: [{ questionId: 'sketch_references', optionId: 'no' }] })
+  assert.ok(h.s.messages.some(message => message.role === 'tool' && message.content.includes('exactly one sketch_understanding')))
+  const choiceId = h.s.pendingChoice.payload.id
+  await assert.rejects(h.choice({ action: 'skip', choiceId }), /Confirm the understanding/)
+  await assert.rejects(h.choice({ action: 'submit', choiceId, answers: [] }), /Confirm the understanding/)
+  await assert.rejects(h.choice({ action: 'submit', choiceId, answers: [{ questionId: 'sketch_understanding', optionId: 'adjust', text: '  ' }] }), /Describe what to add or correct/)
+  assert.equal(h.s.pendingChoice.payload.id, choiceId)
+  assert.equal(h.s.pendingConfirmation, null)
+  assert.equal(h.generationRequests.length, 0)
+  const s = session()
+  s.messages = [sketchRequest(), ...sketchAnswer('sketch_references', 'no'), ...sketchAnswer('sketch_notes', 'no'), ...sketchAnswer('sketch_prompt', 'send')]
+  for (const tool of ['model_sketch_to_image', 'model_gpt_image_2_5_flare_image_to_image'])
+    await assert.rejects(api.prepareModelGeneration(tool, '{}', s), /confirm sketch_understanding/)
+})
+
+test('Sketch approval is tied to the current saved sketch, not an older request', async () => {
+  const s = session()
+  s.messages = [...approvedSketch(), sketchRequest()]
+  await assert.rejects(api.prepareModelGeneration('model_sketch_to_image', '{}', s), /confirm sketch_understanding/)
+})
+
+const { normalizeComposerSelection } = load('shared/utils/agentComposerSelection.ts')
+test('composer keeps only the last model or skill while preserving the prompt', () => {
+  const [first, second] = registry.AGENT_MODELS
+  const modelA = registry.modelMention(first)
+  const modelB = registry.modelMention(second)
+  const skillA = '/product-hunt-gallery'
+  const skillB = '/image-layer-splitter'
+  const prompt = 'Keep this prompt\nand https://example.com/product-hunt-gallery /unknown'
+  for (const [previous, next] of [[modelA, modelB], [skillA, skillB], [modelA, skillA], [skillA, modelA], [modelA, modelA], [skillA, skillA]]) {
+    const normalized = normalizeComposerSelection(`${previous} ${next} ${prompt}`)
+    assert.equal(normalized, `${next} ${prompt}`)
+    assert.equal(normalizeComposerSelection(normalized), normalized)
+  }
+  assert.equal(normalizeComposerSelection(`${modelA} ${skillA} ${skillB} ${prompt}`), `${skillB} ${prompt}`)
+  assert.equal(normalizeComposerSelection(prompt), prompt)
+  assert.equal(normalizeComposerSelection(''), '')
+})

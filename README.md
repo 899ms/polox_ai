@@ -20,15 +20,33 @@
   If you run into a problem you cannot resolve, contact me on <a href="https://discord.gg/FwN6s664Dh">Discord</a>.
 </p>
 
-![PoloX AI workspace with agent conversations, an infinite canvas, and a video project](docs/images/polox-ai-workspace.png)
-
-![PoloX AI animation project with agent generation details and a hand-drawn video on the canvas](docs/images/polox-ai-animation-workspace.png)
-
 ## Introduction
 
 This is the open-source edition of [PoloX AI](https://polox.ai), a creative platform in the same space as [Lovart](https://lovart.ai) and [Crepal](https://crepal.ai). PoloX takes an **agent-native** approach: agent conversations and an infinite canvas bring creation, generation, and editing into one continuous workflow. Describe what you want, work with the agent, and refine the results on the canvas.
 
-PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own OpenRouter and fal API keys; no PoloX account or subscription is required. Projects, conversations, generation history, and media are stored on your machine. AI inference uses external providers, so relevant inputs are sent to those services and their API charges apply.
+PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own [WaveSpeed](https://wavespeed.ai) API key; no PoloX account or subscription is required. Projects, conversations, generation history, and media are stored on your machine. AI inference uses external providers, so relevant inputs are sent to those services and their API charges apply. WaveSpeed supports checkout with credit cards, WeChat Pay, and Alipay.
+
+## Updates
+
+### September 13, 2026
+
+- Added GPT Image 2.5 Flare and Sunburst models
+- Added Product Hunt skill
+- Added Sketch to Image skill
+- Added annotation/comment image editing skill
+- Switched the API provider to [WaveSpeed.ai](https://wavespeed.ai) for easier checkout with credit cards, WeChat Pay, and Alipay
+- Improved agent prompts and skill structure; removed redundant content
+- Fixed other known bugs
+
+## How to update
+
+Tell Codex:
+
+```text
+Pull the latest code from https://github.com/saihhold-zhao/polox_ai and install dependencies.
+```
+
+⚠️ If you have already modified the local code, you may hit merge conflicts. Ask Codex to help resolve them.
 
 ## Install with Codex
 
@@ -60,6 +78,7 @@ You need **Node.js 22.20 or newer** and **pnpm**. For the first run:
 git clone https://github.com/saihhold-zhao/polox_ai.git
 cd polox_ai
 pnpm i
+pnpm browser:install
 pnpm dev
 ```
 
@@ -70,6 +89,8 @@ pnpm dev
 ```
 
 Open [http://localhost:3001](http://localhost:3001) and keep the terminal running. Press `Ctrl+C` to stop the server.
+
+The home page includes Skills for Sketch to Image, Image Text Editor, Image Layer Splitter, and Product Hunt gallery. Select a card or type `/` in the agent composer. Starting a sketch from home creates a new agent in your project. Product Hunt website inspection uses Playwright Chromium; on Linux, install its system dependencies with `pnpm browser:install:linux`.
 
 ### FFmpeg for video concatenation
 
@@ -97,14 +118,14 @@ ffprobe -version
 
 Restart the development server after installing these tools.
 
-## Connect OpenRouter and fal
+## Connect WaveSpeed
 
-1. Start PoloX and click the red **API keys not configured** indicator in the top-right corner.
-2. In the **Service connection** dialog, use the **Get API key** links to obtain your [OpenRouter key](https://openrouter.ai/workspaces/default/keys) and [fal key](https://fal.ai/login?returnTo=%2Fdashboard%2Fkeys).
-3. Paste each key into its corresponding field and click **Test connection**.
-4. Once both tests pass, the indicator turns green and reads **Services connected**. You are ready to create.
+1. Start PoloX and click the red **API key not configured** indicator in the top-right corner.
+2. In the **Service connection** dialog, use the **Get API key** link to obtain your [WaveSpeed key](https://wavespeed.ai/accesskey).
+3. Paste the key and click **Test connection**.
+4. Once the test passes, the indicator turns green and reads **Services connected**. You are ready to create.
 
-The default agent model is **DeepSeek V4 Flash Vision Exp** (`deepseek/deepseek-v4-flash-vision-exp`), which has worked well in the maintainer's testing. You can change the OpenRouter model in the same dialog. Connection testing sends a short model request and may incur a small API charge.
+The agent LLM is locked to `moonshotai/kimi-k3`; you do not need to choose a model in the dialog. Connection testing sends a short model request and may incur a small API charge.
 
 ## Available AI models
 
@@ -114,6 +135,7 @@ The **Frontier AI models** section on the homepage lists the integrated models. 
 
 | Tool | What you can do |
 | --- | --- |
+| **Sketch to Image** | Select `@sketch-to-image` to draw lines and text in the project chat. Save the sketch to the project, optionally upload or select reference images, then confirm the agent's understanding to generate with GPT Image 2.5 Flare. Supports moving and rotating elements, text sizing, and undo/redo. Requires a configured WaveSpeed service. |
 | **Image Text Editor** | Edit text inside images. Ask the PoloX agent how to proceed. You can upload multiple images for batch editing. |
 | **Image Layer Splitter** | Extract selected elements from an image as separate layers. Upload an image and ask the agent to split it; the agent will guide you through selecting elements or drawing boxes. |
 | **Image Background Removal** | Remove an uploaded image's background and keep a transparent PNG. |

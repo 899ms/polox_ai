@@ -2,7 +2,6 @@
 
 Compile the user request into a model-ready prompt with English production instructions:
 
-- Use the user's preferred language for chat replies and user-facing cards. Follow the latest explicit language preference, otherwise use the language of the user's messages
 - Write visual, motion, camera, and other production instructions in English. Keep quoted dialogue, narration, and lyrics in the user's chosen spoken language; never translate those lines into English unless English was selected. English production instructions do not imply English speech
 - In each video prompt that includes speech or singing, explicitly state the selected spoken language and quote the actual lines in that language. Preserve this choice across shots, rewrites, and retries. Example: `Dialogue in Spanish: "Papá, quiero ayudarlo."`
 - Preserve hard constraints from reference analysis, including a locked visual style on long-form jobs

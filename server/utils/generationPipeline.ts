@@ -7,6 +7,7 @@ import { syncJobFromFal } from './falGenerate'
 import { dispatchQueuedJobs, startPendingProviderJob } from './generationQueue'
 import { mergeSourceUrls } from './generationResults'
 import { isStoredMediaUrl, saveMediaFile } from './localMedia'
+import { syncJobFromWavespeed } from './wavespeed'
 
 const MAX_IMAGE_BYTES = 30 * 1024 * 1024
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024
@@ -68,7 +69,7 @@ function isVideoJob(job: IGenerationJob) {
     || model.startsWith('wan/')
 }
 async function syncProviderJob(job: GenerationJobDocument) {
-  return syncJobFromFal(job)
+  return job.provider === 'wavespeed' ? syncJobFromWavespeed(job) : syncJobFromFal(job)
 }
 function pendingAssets(job: IGenerationJob) {
   return (job.resultAssets || []).filter(asset => !(asset.status === 'uploaded' && asset.localUrl && isStoredMediaUrl(asset.localUrl)))

@@ -1,5 +1,5 @@
 export const WAN_30_ASPECT_RATIOS = ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16'] as const
-export const WAN_30_RESOLUTIONS = ['480P', '720P', '1080P'] as const
+export const WAN_30_RESOLUTIONS = ['480p', '720p', '1080p'] as const
 export const WAN_30_DURATIONS = Array.from({ length: 29 }, (_, index) => index + 2)
 
 export const WAN_30_MODEL = 'wan/3-0-video'
@@ -27,10 +27,10 @@ export function isWan30Resolution(value: string): value is Wan30Resolution {
 export function normalizeWan30Resolution(value: string): Wan30Resolution {
   const raw = String(value || '').trim().toUpperCase()
   if (raw === '480P' || raw === '480')
-    return '480P'
+    return '480p'
   if (raw === '720P' || raw === '720')
-    return '720P'
+    return '720p'
   if (raw === '1080P' || raw === '1080')
-    return '1080P'
-  return '480P'
+    return '1080p'
+  return '720p'
 }

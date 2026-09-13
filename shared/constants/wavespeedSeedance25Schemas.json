@@ -1,0 +1,202 @@
+{
+  "bytedance/seedance-2.5/text-to-video": {
+    "additionalProperties": false,
+    "properties": {
+      "aspect_ratio": {
+        "default": "16:9",
+        "description": "The aspect ratio of the generated video.",
+        "enum": [
+          "16:9",
+          "9:16",
+          "4:3",
+          "3:4",
+          "1:1",
+          "21:9"
+        ],
+        "type": "string",
+        "x-ui-component": "select"
+      },
+      "duration": {
+        "default": 5,
+        "description": "The duration of the generated video in seconds (4-30s).",
+        "maximum": 30,
+        "minimum": 4,
+        "type": "integer",
+        "x-ui-component": "slider"
+      },
+      "generate_audio": {
+        "default": true,
+        "description": "Whether to generate native audio synchronized with the output video. Defaults to true.",
+        "type": "boolean"
+      },
+      "prompt": {
+        "description": "Describe the scene, action, camera movement, and mood for the video.",
+        "type": "string"
+      },
+      "reference_audios": {
+        "description": "Reference audio URLs (total length must not exceed 30 seconds).",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "reference_images": {
+        "description": "Reference image URLs to guide visual style, characters, or scene composition.",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 30,
+        "type": "array"
+      },
+      "reference_videos": {
+        "description": "Reference video URLs (total length must not exceed 30 seconds).",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "resolution": {
+        "default": "720p",
+        "description": "The output video resolution.",
+        "enum": [
+          "480p",
+          "720p",
+          "1080p",
+          "4k"
+        ],
+        "type": "string",
+        "x-ui-component": "select"
+      }
+    },
+    "required": [
+      "prompt"
+    ],
+    "type": "object",
+    "x-order-properties": [
+      "prompt",
+      "reference_images",
+      "reference_videos",
+      "reference_audios",
+      "aspect_ratio",
+      "resolution",
+      "duration",
+      "generate_audio"
+    ]
+  },
+  "bytedance/seedance-2.5/image-to-video": {
+    "additionalProperties": false,
+    "properties": {
+      "duration": {
+        "default": 5,
+        "description": "The duration of the generated video in seconds (4-30s).",
+        "maximum": 30,
+        "minimum": 4,
+        "type": "integer",
+        "x-ui-component": "slider"
+      },
+      "generate_audio": {
+        "default": true,
+        "description": "Whether to generate native audio synchronized with the output video. Defaults to true.",
+        "type": "boolean"
+      },
+      "image": {
+        "description": "Start image URL to guide the video generation.",
+        "type": "string"
+      },
+      "last_image": {
+        "description": "Last frame image URL for video continuation.",
+        "type": "string"
+      },
+      "prompt": {
+        "description": "Describe the scene, action, camera movement, and mood for the video.",
+        "type": "string"
+      },
+      "resolution": {
+        "default": "720p",
+        "description": "The output video resolution.",
+        "enum": [
+          "480p",
+          "720p",
+          "1080p",
+          "4k"
+        ],
+        "type": "string",
+        "x-ui-component": "select"
+      }
+    },
+    "required": [
+      "prompt",
+      "image"
+    ],
+    "type": "object",
+    "x-order-properties": [
+      "prompt",
+      "image",
+      "last_image",
+      "resolution",
+      "duration",
+      "generate_audio"
+    ]
+  },
+  "bytedance/seedance-2.5/video-edit": {
+    "additionalProperties": false,
+    "properties": {
+      "generate_audio": {
+        "default": true,
+        "description": "Whether to generate native audio for the edited output. Defaults to true. When set to false, the input video's audio track is preserved on the output instead.",
+        "type": "boolean"
+      },
+      "prompt": {
+        "description": "Describe the edit you want applied to the input video.",
+        "type": "string"
+      },
+      "reference_audios": {
+        "description": "Optional reference audio URLs to guide audio generation.",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "reference_images": {
+        "description": "Optional reference image URLs to guide the edit (subject identity, style, etc.).",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 30,
+        "type": "array"
+      },
+      "resolution": {
+        "default": "720p",
+        "description": "Output video resolution.",
+        "enum": [
+          "480p",
+          "720p",
+          "1080p",
+          "4k"
+        ],
+        "type": "string",
+        "x-ui-component": "select"
+      },
+      "video": {
+        "description": "URL of the input video to edit. Videos longer than 30s are trimmed to 30s; videos shorter than 4s are padded to 4s.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "prompt",
+      "video"
+    ],
+    "type": "object",
+    "x-order-properties": [
+      "prompt",
+      "video",
+      "reference_images",
+      "reference_audios",
+      "resolution",
+      "generate_audio"
+    ]
+  }
+}

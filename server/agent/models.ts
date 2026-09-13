@@ -1,15 +1,19 @@
 import type { AgentSession } from './session'
 import type { AgentEvent, AgentImage } from './types'
 import { AGENT_MODELS, findAgentModelTool, readModelMentions, validateAgentModelInput } from '~~/shared/utils/agentModels'
-import { textEditPrompt } from '~~/shared/utils/imageTextEditor'
+import { IMAGE_TEXT_EDITOR_MODEL, textEditPrompt } from '~~/shared/utils/imageTextEditor'
+import { SKETCH_TO_IMAGE_MODEL, SKETCH_TO_IMAGE_TOOL } from '~~/shared/utils/sketchToImage'
+import { wavespeedEndpoint } from '../../shared/utils/wavespeedSchema'
 import { GenerationJob } from '../models/generationJob'
 import { falEndpoint } from '../utils/falInput'
 import { sanitizeGenerateInput } from '../utils/generateInput'
 import { refreshGenerationJob } from '../utils/generationPipeline'
 import { toPublicJob } from '../utils/generationResults'
+import { confirmedAnnotationEdit } from './imageAnnotations'
 import { confirmedTextEdit } from './imageTextEditor'
 import { confirmedLayerSelections, layerSplitNeedsPlan } from './layerSplitBrief'
 import { persistNow, upsertImage } from './session'
+import { sketchBrief } from './sketchBrief'
 import { acquireGenerationSlot } from './slots'
 
 export interface ModelGeneration {
@@ -26,7 +30,7 @@ export function selectedModelIds(session: Pick<AgentSession, 'messages'>) {
     if (message.role !== 'user' || message.internal)
       continue
     const text = typeof message.content === 'string' ? message.content : Array.isArray(message.content) ? message.content.filter(part => part.type === 'text').map(part => part.text).join('\n') : ''
-    const ids = readModelMentions(text)
+    const ids = readModelMentions(text, true)
     return ids
   }
   return []
@@ -35,6 +39,19 @@ export async function prepareModelGeneration(tool: string, json: string, session
   const model = findAgentModelTool(tool)
   if (!model)
     throw new Error('Unknown model')
+  const sketch = sketchBrief(session.messages)
+  if (sketch && (!sketch.understandingDone || sketch.cancelled))
+    throw new Error('Follow the sketch-to-image skill: finish sketch_references and confirm sketch_understanding before generation.')
+  if (sketch && ![SKETCH_TO_IMAGE_TOOL, SKETCH_TO_IMAGE_MODEL].includes(model.id))
+    throw new Error('Use model_sketch_to_image for this sketch workflow.')
+  if (model.id === SKETCH_TO_IMAGE_TOOL) {
+    if (!sketch?.understandingDone)
+      throw new Error('Save a sketch and complete the sketch-to-image skill before generating.')
+    const raw = JSON.parse(json)
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+      throw new Error('Model parameters must be an object')
+    return prepareModelGeneration(`model_${SKETCH_TO_IMAGE_MODEL.replaceAll('-', '_')}`, JSON.stringify({ ...raw, images: sketch.inputUrls }), session)
+  }
   if (model.id === 'image-layer-splitter' && layerSplitNeedsPlan(session.messages))
     throw new Error('Layer targets are missing. Do not invent regions or show a generation confirmation. Call ask_user with layer_selection_method (Draw boxes / Describe the layers / Other) and wait. If Describe the layers was already selected, call ask_user with layer_split_plan containing image-specific extraction proposals and Other, then wait. If Draw boxes was selected, request actual regions. A model mention followed by an upload is not a confirmed splitting plan.')
   if (model.id === 'image-text-editor') {
@@ -43,19 +60,21 @@ export async function prepareModelGeneration(tool: string, json: string, session
     const edit = confirmedTextEdit(session, sourceUrl)
     if (!edit || !session.images.some(image => image.url === edit.imageUrl && image.status === 'success'))
       throw new Error('Open the text editor and wait for the user to confirm edits first.')
-    const modelId = 'gpt-image-2-image-to-image'
+    const modelId = IMAGE_TEXT_EDITOR_MODEL
     const prompt = textEditPrompt(edit.lines)
-    const input = sanitizeGenerateInput(modelId, { prompt, image_size: 'auto', quality: 'high', image_urls: [edit.imageUrl] })
-    return { modelId, name: 'Image text edit', input, requestModel: falEndpoint(modelId, input), uncertainFields: [], inputUrls: [edit.imageUrl] }
+    const input = sanitizeGenerateInput(modelId, { prompt, quality: 'high', images: [edit.imageUrl] })
+    return { modelId, name: 'Image text edit', input, requestModel: wavespeedEndpoint(modelId)!, uncertainFields: [], inputUrls: [edit.imageUrl] }
   }
-  const selected = selectedModelIds(session)
+  const selected = selectedModelIds(session).map(id => id === SKETCH_TO_IMAGE_TOOL ? SKETCH_TO_IMAGE_MODEL : id)
   const categorySelections = selected.filter(id => AGENT_MODELS.find(item => item.id === id)?.category === model.category)
   if (categorySelections.length && !categorySelections.includes(model.id))
     throw new Error(`The user selected ${categorySelections.join(', ')}. Use that exact model tool, or ask before changing models.`)
   const raw = JSON.parse(json)
   if (!raw || typeof raw !== 'object' || Array.isArray(raw))
     throw new Error('Model parameters must be an object')
-    // Session IDs and latest are resolved only for actual media fields.
+  if (sketch && model.id === SKETCH_TO_IMAGE_MODEL)
+    raw.images = sketch.inputUrls
+  // Session IDs and latest are resolved only for actual media fields.
   for (const [key, property] of Object.entries(model.schema.components.schemas.Input.properties)) {
     if (!key.includes('url') && property['x-ui-component'] !== 'uploaders')
       continue
@@ -86,16 +105,24 @@ export async function prepareModelGeneration(tool: string, json: string, session
       raw.regions = selection.regions
     }
   }
+  const annotation = confirmedAnnotationEdit(session)
+  if (annotation && model.task === 'Image to Image') {
+    const imageField = ['images', 'input_urls', 'image_urls', 'image_input'].find(key => key in model.schema.components.schemas.Input.properties)
+    if (!imageField)
+      throw new Error('This model cannot accept the original image and annotation guide.')
+    const urls = Array.isArray(raw[imageField]) ? raw[imageField] : []
+    raw[imageField] = [...new Set([annotation.imageUrl, annotation.annotatedImageUrl, ...annotation.points.flatMap(point => (point.references || []).map(reference => reference.url)), ...urls])]
+  }
   const validated = validateAgentModelInput(model, raw)
   const input = sanitizeGenerateInput(model.id, validated)
   return {
     modelId: model.id,
     name: String(raw._name || model.name).slice(0, 100),
     input,
-    requestModel: falEndpoint(model.id, input),
+    requestModel: wavespeedEndpoint(model.id) || falEndpoint(model.id, input),
 
     uncertainFields: Array.isArray(raw._uncertain_fields) ? raw._uncertain_fields.filter((key: unknown) => typeof key === 'string' && key in model.schema.components.schemas.Input.properties) : [],
-    inputUrls: Object.entries(input).filter(([key]) => key.includes('url') || model.schema.components.schemas.Input.properties[key]?.['x-ui-component'] === 'uploaders').flatMap(([, value]) => Array.isArray(value) ? value : [value]).filter((value): value is string => typeof value === 'string' && /^https?:\/\//i.test(value)),
+    inputUrls: Object.entries(input).filter(([key]) => key === 'image' || key.includes('url') || model.schema.components.schemas.Input.properties[key]?.['x-ui-component'] === 'uploaders').flatMap(([, value]) => Array.isArray(value) ? value : [value]).filter((value): value is string => typeof value === 'string' && /^https?:\/\//i.test(value)),
   }
 }
 export function modelConfirmation(args: ModelGeneration) {
@@ -118,7 +145,7 @@ export function modelConfirmation(args: ModelGeneration) {
 export async function runModelGeneration(session: AgentSession, callId: string, args: ModelGeneration, emit: (event: AgentEvent) => void) {
   const model = AGENT_MODELS.find(model => model.id === args.modelId)!
   const mediaUrls = (kind: 'image' | 'video' | 'audio') => Object.entries(args.input)
-    .filter(([key]) => (key.includes('url') || model.schema.components.schemas.Input.properties[key]?.['x-ui-component'] === 'uploaders') && (kind === 'image' ? !key.includes('video') && !key.includes('audio') : key.includes(kind)))
+    .filter(([key]) => (key === 'image' || key.includes('url') || model.schema.components.schemas.Input.properties[key]?.['x-ui-component'] === 'uploaders') && (kind === 'image' ? !key.includes('video') && !key.includes('audio') : key.includes(kind)))
     .flatMap(([, value]) => Array.isArray(value) ? value : [value])
     .filter((value): value is string => typeof value === 'string' && /^https?:\/\//i.test(value))
   const image: AgentImage = {
