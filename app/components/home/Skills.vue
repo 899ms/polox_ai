@@ -18,7 +18,7 @@ const skills = [...PUBLIC_AGENT_SKILLS].sort((a, b) => Number(a.id === 'product-
       </p>
     </div>
 
-    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       <NuxtLink
         v-for="skill in skills"
         :key="skill.id"

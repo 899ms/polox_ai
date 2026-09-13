@@ -28,6 +28,13 @@ export const PUBLIC_AGENT_SKILLS = [
     description: 'Draw boxes around objects to extract them as separate transparent PNG layers.',
     keywords: 'image layer splitter transparent png 图层 拆分',
   },
+  {
+    id: 'long-form-video',
+    icon: 'lucide:clapperboard',
+    name: 'Long-form video',
+    description: 'Plan a storyboard and produce a multi-shot film from stills, clips, and concat.',
+    keywords: 'long-form video film storyboard short film 长视频 短片 分镜',
+  },
 ] as const
 
 export function searchAgentSkills(query: string) {
