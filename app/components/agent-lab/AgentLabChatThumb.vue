@@ -32,16 +32,15 @@ const label = computed(() => {
 function openPreview() {
   if (!ready.value)
     return
-  if (navigateToMedia) {
-    void navigateToMedia(props.image.url)
-    return
-  }
   open({
     url: props.image.url,
     kind: isVideo.value ? 'video' : 'image',
     alt: label.value,
     cutout: isCutout.value,
   })
+  // Keep the matching canvas asset selected while showing the fullscreen preview.
+  if (navigateToMedia)
+    void navigateToMedia(props.image.url)
 }
 </script>
 
