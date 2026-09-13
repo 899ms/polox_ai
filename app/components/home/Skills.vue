@@ -45,7 +45,7 @@ const skills = [...PUBLIC_AGENT_SKILLS].sort((a, b) => Number(a.id === 'product-
           <Ellipsis class="size-5 text-muted-foreground" aria-hidden="true" />
         </div>
         <h3 class="text-base font-medium text-muted-foreground">
-          更多技能即将到来
+          More skills coming soon
         </h3>
       </div>
     </div>
