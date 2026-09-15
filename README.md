@@ -145,6 +145,8 @@ Restart the development server after installing these tools.
 
 The agent LLM is locked to `moonshotai/kimi-k3`; you do not need to choose a model in the dialog. Connection testing sends a short model request and may incur a small API charge.
 
+This project needs a **vision-capable** model for image understanding. Among the options tested so far, Kimi has been the most stable fit. If you know a stronger or more cost-effective alternative, please open an [Issue](https://github.com/saihhold-zhao/polox_ai/issues) with your suggestion.
+
 ## Available AI models
 
 The **Frontier AI models** section on the homepage lists the integrated models. To ask the agent to use a particular model, select it with **@** in your message.

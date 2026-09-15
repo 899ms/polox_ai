@@ -145,6 +145,8 @@ ffprobe -version
 
 Agent LLM 已锁定为 `moonshotai/kimi-k3`，界面无需再选择模型。连通测试会发送一次简短的模型请求，可能产生少量 API 费用。
 
+本项目需要支持图像理解的 **视觉大模型**。在已测试过的模型里，Kimi 的表现相对更稳。若你有更合适或更具性价比的替代方案，欢迎在 [Issue](https://github.com/saihhold-zhao/polox_ai/issues) 提出建议。
+
 ## 已接入的 AI 模型
 
 首页的 **Frontier AI models** 区域展示了已接入的模型。如果希望 Agent 使用特定模型，请在消息中通过 **@** 选择并指定。
