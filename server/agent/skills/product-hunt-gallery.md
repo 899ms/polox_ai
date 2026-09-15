@@ -6,7 +6,12 @@ Create a coherent set of exhibition/gallery images for a Product Hunt product pa
 
 ## Established output settings — do not ask again
 
-For this workflow, **9:16 portrait is already decided** for BOTH the visual design board and every final gallery image. Use `aspect_ratio: "9:16"` directly, with `resolution: "1K"` and GPT Image 2.5 Flare as specified below. These are established requirements, not recommendations or unresolved choices.
+This workflow has two distinct fixed formats, both using **GPT Image 2.5 Flare at 1K**:
+- **Visual design board: 9:16 portrait**, using `aspect_ratio: "9:16"`.
+- **Final gallery images: 27:16 landscape**, using `aspect_ratio: "27:16"`.
+- **Product Hunt upload export: 1270 × 760 px**, resized proportionally with a small centered crop, never stretched.
+
+[Product Hunt's posting guide](https://help.producthunt.com/en/articles/479557-how-to-post-a-product) recommends 1270 × 760 gallery images and at least two images for a viewable gallery. The generator's supported 27:16 is a close landscape match; 1K generation does not itself guarantee the exact upload dimensions. The portrait board is an internal style reference, not a gallery slide. These settings are settled; do not ask again.
 
 - Never ask which aspect ratio, orientation, resolution or model to use. Do not offer 16:9 landscape, 1:1 square or an “Other ratio” option.
 - Generic model-planning or single-generator rules about asking for missing settings do not apply to these already-defined settings. Do not run their generic settings questionnaire for this workflow.
@@ -92,6 +97,7 @@ This is an actual generated reference image, not just a written style summary. I
 - Resolution: **1K**.
 - Background: **opaque**.
 - Output title (`_name`): **Product Hunt · Visual design board**, following the established interaction language.
+- **No white borders:** the board must be full-bleed. Background color fills the entire 9:16 frame edge-to-edge. Do not leave white/light empty margins, letterboxing, polaroid frames, or a poster floating on a blank canvas.
 
 These are already defined by this workflow; do not ask the user to choose the board's model, ratio or resolution again. The final gallery settings are also fixed below; do not present either set of settings as official Product Hunt upload requirements. Continue to honor an explicit user override and the existing credit-authorization policy. Do not silently substitute another model if Flare is unavailable.
 
@@ -106,26 +112,26 @@ Send `aspect_ratio: "9:16"`, `resolution: "1K"`, `background: "opaque"`, a compl
 
 Choose concrete design values before writing the generation prompt. Base them on the references and product positioning; do not use the same palette or rounded-card style for every brand. When following the website, retain its recognizable identity while simplifying it into a coherent gallery system. When proposing a fresh direction, state that it is a proposal.
 
-Compose a clean portrait brand/design board with generous spacing, a clear reading order, and a few large, legible demonstrations:
+Compose a clean portrait brand/design board with clear internal spacing, a clear reading order, and a few large, legible demonstrations. Internal whitespace between sections is fine; outer white margins around the whole board are not:
 
 1. **Brand and direction:** exact brand name, the supplied logo if available, and a short design-direction label. Without a logo, use the brand name in type; do not invent an official logo. A slogan is optional.
 2. **Color palette:** 4–6 swatches with short role labels and chosen HEX values: background, surface, primary text, muted text, accent, and an optional secondary accent. Demonstrate a readable text/background pairing.
 3. **Typography:** a large headline specimen, supporting copy and a small label showing hierarchy, weight, line spacing and contrast. Prefer brief samples over paragraphs. Describe the intended type style without claiming the generated image embeds an exact font file.
 4. **Shape and spacing:** a small family of deliberate corner radii, borders and shadows, plus a simple spacing scale. For example, separate card and button treatments; use square corners if that better fits the brand. Specify values as proposed design tokens, not verified website CSS when they were inferred.
 5. **Product framing and graphic style:** demonstrate the chosen screenshot frame, background treatment, icon/illustration style and accent usage. Preserve real product UI when supplied. If no UI reference exists, use an abstract layout placeholder rather than a fictional product screen presented as real.
-6. **Mini gallery composition:** one compact example combining a benefit headline, supporting text and a product/reference area to demonstrate how the system translates into a gallery image.
+6. **Mini gallery composition:** one compact landscape example combining a benefit headline, supporting text and a product/reference area to demonstrate how the system translates into a gallery image.
 
 Keep the board useful at 1K: avoid tiny annotations, dense grids and excessive specimens. Use English section labels and design annotations; preserve exact brand spelling and the user's requested language for any proposed final-gallery copy.
 
-A useful prompt structure is: “Create one polished portrait visual design board for [brand], a product that [supported product description]. This board defines the visual system for a consistent Product Hunt gallery. [Reference roles and preserve/change instructions.] Use [chosen palette and tokens], [typography hierarchy], [corner/border/shadow treatment], and [spacing/framing rules]. Include clearly separated, readable demonstrations of brand identity, color swatches, typography, component shapes and one mini gallery composition. [Actual short labels and copy.] Prioritize visual examples, generous whitespace and legibility at 1K. Do not invent product capabilities, logos or testimonials.” Replace every placeholder with the actual brief before calling the tool.
+A useful prompt structure is: “Create one polished portrait visual design board for [brand], a product that [supported product description]. This board defines the visual system for a consistent Product Hunt gallery. [Reference roles and preserve/change instructions.] Use [chosen palette and tokens], [typography hierarchy], [corner/border/shadow treatment], and [spacing/framing rules]. Include clearly separated, readable demonstrations of brand identity, color swatches, typography, component shapes and one mini gallery composition. [Actual short labels and copy.] Prioritize visual examples, readable internal spacing and legibility at 1K. Fill the full 9:16 frame edge-to-edge with the board background—no white borders, letterboxing or empty outer margins. Do not invent product capabilities, logos or testimonials.” Replace every placeholder with the actual brief before calling the tool.
 
 ### Use the result as the gallery reference
 
-Wait for the board result and inspect the generated image. Check brand spelling, legibility, palette coherence, shape consistency, and whether the demonstrated style matches the chosen direction. Keep a short textual record of the chosen palette and shape/spacing rules so later prompts do not depend on reading tiny text from the generated board.
+Wait for the board result and inspect the generated image. Check brand spelling, legibility, palette coherence, shape consistency, full-bleed coverage (no white outer borders), and whether the demonstrated style matches the chosen direction. Keep a short textual record of the chosen palette and shape/spacing rules so later prompts do not depend on reading tiny text from the generated board.
 
-Show the board with a concise caption and use its actual result URL as a shared style reference in subsequent gallery calls, alongside relevant original product screenshots or logos. Assign roles explicitly: the board controls visual style; original product references control UI and identity. Keep the same design rules across all gallery images, and do not reproduce the board's swatch grids or specimen labels in the final gallery.
+Show the board with a concise caption and use its actual result URL as the ONLY image reference in every subsequent gallery call. Website screenshots, uploaded references and separate logo assets may inform the board creation stage, but must not be passed to final gallery generation. Carry confirmed product facts and copy into the gallery's text prompt. Keep the same design rules across all gallery images, and do not reproduce the board's swatch grids or specimen labels in the final gallery.
 
-After the board succeeds, complete the brand-confirmation card and then the image-count card below before generating gallery images. These are separate sequential checkpoints, even when credit authorization is Automatic. Apply requested revisions to the shared direction before producing more images. If the board fails, report the failure and follow the existing result-evaluation rules; do not pretend it exists or proceed with gallery generation as though the prerequisite succeeded.
+After the board succeeds, complete the brand-confirmation card and then the image-count card below before generating gallery images. These are separate sequential checkpoints, even when credit authorization is Automatic. Apply requested revisions to the shared direction before producing more images. If the board fails, report the failure and follow result-evaluation (⚠️ + ask_user before regenerate); do not pretend it exists or proceed with gallery generation as though the prerequisite succeeded.
 
 ## Confirm brand details after the board
 
@@ -158,7 +164,7 @@ Use the question prompt “How many gallery images would you like?” Offer:
 - A smaller or larger count only when it represents a useful, non-repetitive alternative, with its own breakdown.
 - `other`: “Other number”, with `allow_custom: true`.
 
-Mark the recommended count in `recommended` and state it in the top-level `recommendation`. Wait for the answer or explicit skip; skip delegates only to that stated count. Validate a custom answer as a positive whole number. If it is unclear, ask for clarification rather than guessing. For a single image, combine the overview and the most important features in one readable composition. For a count exceeding the distinct features, clarify the desired additional coverage instead of duplicating images or inventing capabilities.
+Mark the recommended count in `recommended` and state it in the top-level `recommendation`. Wait for the answer or explicit skip; skip delegates only to that stated count. Validate a custom answer as a positive whole number. If it is unclear, ask for clarification rather than guessing. Recommend at least two images for a viewable Product Hunt gallery. If the user explicitly requests a single image, combine the overview and the most important features and briefly identify it as a standalone preview rather than a complete Product Hunt gallery. For a count exceeding the distinct features, clarify the desired additional coverage instead of duplicating images or inventing capabilities.
 
 Do not generate in the same turn as the count question. Once the answer is received, build a short ordered plan: image 1 introduces the product and main benefit; the remaining images each explain a confirmed feature or feature group. Give each image one clear communication goal and short, legible copy. Keep exact brand spelling and the confirmed slogan/logo choices. The confirmed count is the total number of final gallery images.
 
@@ -168,10 +174,10 @@ Generate only after all three prerequisites exist: a successful visual design bo
 
 Use **GPT Image 2.5 Flare Image to Image** for EVERY final gallery image through `model_gpt_image_2_5_flare_image_to_image`, with:
 
-- `aspect_ratio: "9:16"`
+- `aspect_ratio: "27:16"`
 - `resolution: "1K"`
 - `background: "opaque"`
-- `input_urls`: the actual successful visual design board URL as the FIRST reference, followed by any relevant original product screenshots or confirmed logo assets within the tool’s reference limit.
+- `input_urls`: exactly ONE URL, the actual latest successful visual design board result: `[visual_design_board_url]`. Do not append website screenshots, uploaded assets, separate logos, or previous gallery images. Before submitting each gallery call, verify that this array contains only the board URL.
 - `prompt`: complete English production instructions, preserving the requested on-image text language.
 - `_name`: the gallery position and content role.
 
@@ -179,8 +185,12 @@ Use the latest successful board if it was revised. Reference the board explicitl
 
 These settings are fixed for this workflow; do not add model, ratio or resolution questionnaires. Honor an explicit later user override and the existing credit-authorization rules. Each call produces one gallery image; multiple independent gallery images may be submitted together only after both cards have been resolved.
 
-In every prompt, assign reference roles explicitly: the design board defines palette, typography hierarchy, corners, spacing, borders, shadows and overall visual treatment; original screenshots define real product UI; the confirmed logo defines the brand mark. Preserve a consistent visual system across the set while varying composition to suit each feature. Do not reproduce the board’s swatch grids, specimen annotations or design-token labels in the final gallery images. Do not invent UI, claims, testimonials or product capabilities. Keep omitted logos/slogans omitted.
+In every prompt, explicitly request a wide landscape 27:16 composition. Transfer the portrait board’s style, not its orientation or page layout. Keep text, logos and important UI comfortably inside the edges to allow the slight centered crop to 1270 × 760.
 
-Name each output by its role, such as “Gallery 1 · Cover” or “Gallery 2 · Core feature”, in the interaction language. Keep the intended sequence clear. After generation, inspect actual available results for brand spelling, readable text, supported claims, recognizable UI and consistency across the set. Report partial failures accurately and follow existing result-evaluation rules for any retries; do not claim a complete set while images are missing.
+**No white borders on gallery images:** every gallery prompt must require a full-bleed 27:16 frame. Background and design fill the entire canvas edge-to-edge. Forbid white/light empty margins, letterboxing, pillarboxing, polaroid/device frames that create blank borders, or a card floating on a blank white field. Safe inset for crop is for content only—never rendered as a visible white border.
 
-Deliver the generated images in order with concise captions. Generating gallery assets does not publish a Product Hunt listing.
+In every prompt, explain that the sole reference image is the visual design board, defining palette, typography hierarchy, corners, spacing, borders, shadows and overall visual treatment. Use the confirmed brand details and features in the text prompt. Preserve the confirmed logo as represented on the board when applicable; do not supply a separate logo reference. If the board does not provide sufficient UI detail, use an abstract feature illustration rather than inventing a product screenshot or adding the original website capture. Preserve a consistent visual system across the set while varying composition to suit each feature. Do not reproduce the board’s swatch grids, specimen annotations or design-token labels in the final gallery images. Do not invent UI, claims, testimonials or product capabilities. Keep omitted logos/slogans omitted. Explicitly ban white borders and empty outer margins in the generation prompt wording.
+
+Name each output by its role, such as “Gallery 1 · Cover” or “Gallery 2 · Core feature”, in the interaction language. Keep the intended sequence clear. After generation, inspect actual available results for brand spelling, readable text, supported claims, recognizable UI, consistency across the set, and absence of white/empty outer borders. Report partial failures accurately and follow result-evaluation (⚠️ + ask_user before any regenerate, even under Automatic); do not claim a complete set while images are missing.
+
+Deliver the generated images in order with concise captions. After reviewing successful gallery results, call `export_zip` with `preset: "product_hunt_gallery"`, the final gallery asset IDs or URLs in order, and a descriptive archive name. Exclude the design board. This exports 1270 × 760 PNG copies using proportional resizing and a small centered crop; the generated canvas originals remain unchanged. Link the actual successful ZIP result as the upload-ready download. If export fails, report it accurately and do not label the original 1K images as exact-size exports. Generating gallery assets does not publish a Product Hunt listing.
