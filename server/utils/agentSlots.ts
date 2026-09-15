@@ -68,7 +68,7 @@ function modelMeta(kind: string, sourceUrl: string, videoMode: string, videoFami
   }
   return {
     provider: generationProvider('gpt-image-2-text-to-image'),
-    model: sourceUrl ? 'gpt-image-2-image-to-image' : 'gpt-image-2-text-to-image',
+    model: sourceUrl ? 'gpt-image-2-5-sunburst-image-to-image' : 'gpt-image-2-text-to-image',
     category: 'Image',
     task: sourceUrl ? 'Image to Image' : 'Text to Image',
   }
