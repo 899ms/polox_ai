@@ -97,7 +97,7 @@ function modelFor(item: AgentResultItem) {
   return {
     provider: generationProvider('gpt-image-2-text-to-image'),
     model: item.sourceUrl
-      ? 'gpt-image-2-image-to-image'
+      ? 'gpt-image-2-5-sunburst-image-to-image'
       : 'gpt-image-2-text-to-image',
     category: 'Image',
     task: item.sourceUrl ? 'Image to Image' : 'Text to Image',
