@@ -50,7 +50,8 @@ export async function pollFalTask(taskId: string, options: { timeoutMs: number, 
 }
 export async function generateGptImage2(input: { prompt: string, aspect_ratio: string, resolution: string, input_urls?: string[] }, signal?: AbortSignal, onCreated?: OnProviderCreated) {
   signal?.throwIfAborted()
-  const model = input.input_urls?.length ? 'gpt-image-2-image-to-image' : 'gpt-image-2-text-to-image'
+  // Image edits use GPT Image 2.5 Sunburst; text-to-image keeps GPT Image 2.
+  const model = input.input_urls?.length ? 'gpt-image-2-5-sunburst-image-to-image' : 'gpt-image-2-text-to-image'
   const payload = {
     prompt: input.prompt,
     resolution: input.resolution.toLowerCase(),
