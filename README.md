@@ -24,7 +24,7 @@
 <div style="overflow-x: auto; white-space: nowrap; max-width: 100%; margin: 1rem 0 1.5rem; padding-bottom: 0.5rem;">
   <img src="docs/images/polox-readme-01-hero.jpeg" alt="PoloX AI — The agent-native creative platform" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
   <img src="docs/images/polox-readme-02-unified-space.jpeg" alt="PoloX AI — One unified space for agent chat and infinite canvas" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
-  <img src="docs/images/polox-readme-03-skills.jpeg" alt="PoloX AI skills — Sketch to Image, Image Text Editor, Layer Splitter, Product Hunt gallery" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
+  <img src="docs/images/polox-readme-03-skills.jpeg" alt="PoloX AI skills — Product Hunt, App Store Graphics, Sketch to Image, Annotated Image Edit, and more" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
   <img src="docs/images/polox-readme-04-models.jpeg" alt="PoloX AI — Latest AI image and video models in one workspace" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
   <img src="docs/images/polox-readme-05-utilities.jpeg" alt="PoloX AI — Everyday utilities for images and videos" height="280" style="display: inline-block; border-radius: 8px;" />
 </div>
@@ -37,12 +37,21 @@ PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own [WaveSpeed](https:
 
 ## Updates
 
-### September 13, 2026
+### September 16, 2026 — v1.2.0
+
+- Added **Annotated Image Edit** and **App Store Graphics** skills
+- Chat supports drag-and-drop attachments; clicking an attachment opens the media lightbox
+- Default image-to-image path uses **GPT Image 2.5 Sunburst**
+- Long Thinking / choice / confirmation text can collapse and expand
+- Result evaluation asks before regenerating on a suspected mismatch (no silent auto-retry)
+- Long-form video can use **reference audio** for more consistent character voices
+- README Skills section aligned with the `/` skill picker
+- Miscellaneous small fixes
+
+### September 13, 2026 — v1.1.0
 
 - Added GPT Image 2.5 Flare and Sunburst models
-- Added Product Hunt skill
-- Added Sketch to Image skill
-- Added annotation/comment image editing skill
+- Added Product Hunt and Sketch to Image skills
 - Switched the API provider to [WaveSpeed.ai](https://wavespeed.ai) for easier checkout with credit cards, WeChat Pay, and Alipay
 - Improved agent prompts and skill structure; removed redundant content
 - Fixed other known bugs
@@ -99,7 +108,7 @@ pnpm dev
 
 Open [http://localhost:3001](http://localhost:3001) and keep the terminal running. Press `Ctrl+C` to stop the server.
 
-The home page includes Skills for Sketch to Image, Image Text Editor, Image Layer Splitter, and Product Hunt gallery. Select a card or type `/` in the agent composer. Starting a sketch from home creates a new agent in your project. Product Hunt website inspection uses Playwright Chromium; on Linux, install its system dependencies with `pnpm browser:install:linux`.
+The home page **Skills** catalog currently includes Product Hunt gallery, App Store Graphics, Sketch to Image, Image Text Editor, Annotated Image Edit, Image Layer Splitter, and Long-form video. Select a card or type `/` in the agent composer to pick a skill. Starting a sketch from home creates a new agent in your project. Product Hunt website inspection uses Playwright Chromium; on Linux, install its system dependencies with `pnpm browser:install:linux`.
 
 ### FFmpeg for video concatenation
 
@@ -140,16 +149,21 @@ The agent LLM is locked to `moonshotai/kimi-k3`; you do not need to choose a mod
 
 The **Frontier AI models** section on the homepage lists the integrated models. To ask the agent to use a particular model, select it with **@** in your message.
 
-## Creative tools
+## Skills
 
-| Tool | What you can do |
+Pick a skill from the home page, or type `/` in the agent composer. Skills are guided workflows the agent runs for you.
+
+| Skill | What you can do |
 | --- | --- |
-| **Sketch to Image** | Select `@sketch-to-image` to draw lines and text in the project chat. Save the sketch to the project, optionally upload or select reference images, then confirm the agent's understanding to generate with GPT Image 2.5 Flare. Supports moving and rotating elements, text sizing, and undo/redo. Requires a configured WaveSpeed service. |
-| **Image Text Editor** | Edit text inside images. Ask the PoloX agent how to proceed. You can upload multiple images for batch editing. |
-| **Image Layer Splitter** | Extract selected elements from an image as separate layers. Upload an image and ask the agent to split it; the agent will guide you through selecting elements or drawing boxes. |
-| **Image Background Removal** | Remove an uploaded image's background and keep a transparent PNG. |
-| **AI Image Editor** | Upload an image and describe your changes in natural language. Uses image-to-image models. |
-| **AI Video Editor** | Upload a video and describe your changes in natural language. Uses reference-to-video models. |
+| **Product Hunt gallery** | Build a consistent Product Hunt launch gallery from a website or product brief. |
+| **App Store Graphics** | Turn app screenshots into a matched set of App Store–style frames with shared visual direction. |
+| **Sketch to Image** | Draw lines and text in chat (`/sketch-to-image`), save the sketch, optionally add references, then generate with GPT Image 2.5 Flare. Supports move/rotate, text sizing, and undo/redo. |
+| **Image Text Editor** | Edit text inside images while preserving fonts and layout. Supports batch uploads. |
+| **Annotated Image Edit** | Mark points on an image and describe each change for precise edits. |
+| **Image Layer Splitter** | Draw boxes around objects and extract them as separate transparent PNG layers. |
+| **Long-form video** | Plan a storyboard, generate multi-shot clips, and stitch them with FFmpeg. |
+
+Outside these skills, you can still ask the agent for open-ended image or video edits (including background removal) in plain language.
 
 ## Long-form video generation
 
@@ -165,7 +179,9 @@ A typical workflow looks like this:
 
 After assembly, continue the conversation to revise shots or add scenes. You can guide the whole process through the agent.
 
-The [long-form video skill](server/agent/skills/long-form-video.md) defines this workflow and still has room for improvement—for example, using audio references to maintain consistent character voices. Suggestions and contributions are welcome through [Issues](https://github.com/saihhold-zhao/polox_ai/issues).
+You can attach **reference audio** so clips keep a more consistent character voice or sound direction across shots (supported on the Seedance reference-to-video path via `reference_audios`).
+
+The [long-form video skill](server/agent/skills/long-form-video.md) defines this workflow. It is still early; suggestions and contributions are welcome through [Issues](https://github.com/saihhold-zhao/polox_ai/issues).
 
 ## Troubleshooting and feedback
 

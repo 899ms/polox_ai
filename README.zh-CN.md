@@ -24,7 +24,7 @@
 <div style="overflow-x: auto; white-space: nowrap; max-width: 100%; margin: 1rem 0 1.5rem; padding-bottom: 0.5rem;">
   <img src="docs/images/polox-readme-01-hero.jpeg" alt="PoloX AI — Agent 原生创作平台" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
   <img src="docs/images/polox-readme-02-unified-space.jpeg" alt="PoloX AI — Agent 对话与无限画布统一工作区" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
-  <img src="docs/images/polox-readme-03-skills.jpeg" alt="PoloX AI 技能 — 草图生图、图片文字编辑、图层拆分、Product Hunt gallery" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
+  <img src="docs/images/polox-readme-03-skills.jpeg" alt="PoloX AI 技能 — Product Hunt、App Store Graphics、草图生图、标注编辑等" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
   <img src="docs/images/polox-readme-04-models.jpeg" alt="PoloX AI — 一站式图像与视频模型工作区" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
   <img src="docs/images/polox-readme-05-utilities.jpeg" alt="PoloX AI — 图片与视频日常工具" height="280" style="display: inline-block; border-radius: 8px;" />
 </div>
@@ -37,12 +37,21 @@ PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 [WaveSpeed]
 
 ## 更新
 
-### 2026 年 9 月 13 日
+### 2026 年 9 月 16 日 — v1.2.0
+
+- 新增 **Annotated Image Edit**、**App Store Graphics** 技能
+- 聊天区支持拖拽添加附件；点击附件直接打开 lightbox
+- 默认图生图路径改为 **GPT Image 2.5 Sunburst**
+- Thinking / 选项卡 / 确认卡支持长文本折叠
+- 结果评估在疑似不匹配时先询问再重生成（禁止静默自动重试）
+- 长视频生成可使用 **参考声音**，便于角色声音更一致
+- README 的 Skills 说明与 `/` 技能选择器对齐
+- 其他小修复
+
+### 2026 年 9 月 13 日 — v1.1.0
 
 - 接入 GPT Image 2.5 Flare 和 Sunburst 两个模型
-- 增加了 Product Hunt skill
-- 增加草图到图像 skill
-- 增加 annotation/comment 编辑图片 skill
+- 增加了 Product Hunt、草图到图像等 skill
 - API provider 改为 [WaveSpeed.ai](https://wavespeed.ai)，便于使用信用卡 / 微信 / 支付宝结账
 - 优化了 Agent 的 prompt、skill 结构，去除冗余内容
 - 修复了其他已知 bug
@@ -99,7 +108,7 @@ pnpm dev
 
 打开 [http://localhost:3001](http://localhost:3001)，使用期间保持终端运行。按 `Ctrl+C` 可停止服务。
 
-首页 Skills 板块包含草图生图、图片文字编辑、图层拆分和 Product Hunt gallery。点击卡片或在 Agent 输入框输入 `/` 即可选择。从首页启动草图会在项目中新建 Agent。Product Hunt 网站读取使用 Playwright Chromium；Linux 环境可运行 `pnpm browser:install:linux` 安装所需系统依赖。
+首页 **Skills** 目前包含：Product Hunt gallery、App Store Graphics、草图生图、图片文字编辑、Annotated Image Edit、图层拆分、长视频生成。点击卡片，或在 Agent 输入框输入 `/` 即可选择技能。从首页启动草图会在项目中新建 Agent。Product Hunt 网站读取使用 Playwright Chromium；Linux 环境可运行 `pnpm browser:install:linux` 安装所需系统依赖。
 
 ### 安装 FFmpeg：用于视频拼接
 
@@ -140,16 +149,21 @@ Agent LLM 已锁定为 `moonshotai/kimi-k3`，界面无需再选择模型。连�
 
 首页的 **Frontier AI models** 区域展示了已接入的模型。如果希望 Agent 使用特定模型，请在消息中通过 **@** 选择并指定。
 
-## 实用工具
+## Skills
 
-| 工具 | 功能与用法 |
+可在首页选择技能，或在 Agent 输入框输入 `/` 唤出技能列表。Skill 是由 Agent 引导完成的专用工作流。
+
+| 技能 | 功能与用法 |
 | --- | --- |
-| **Sketch to Image · 草图生成图片** | 选择 `@sketch-to-image`，在项目对话内绘制线条和文字。保存草图到项目后，可上传参考图或从项目中选择图片；确认 Agent 对图片的理解后，即使用 GPT Image 2.5 Flare 生成。支持移动和旋转元素、调整字号、撤销与重做。需配置 WaveSpeed 服务。 |
-| **Image Text Editor · 图片文字编辑** | 编辑图片中的文字。可以直接询问 PoloX Agent 如何操作；支持一次上传多张图片进行批量编辑。 |
-| **Image Layer Splitter · 图片图层拆分** | 将图片中指定的元素提取为独立图层。上传图片并告诉 Agent 你想拆分哪些元素，Agent 会引导你选择元素或绘制选框。 |
-| **Image Background Removal · 图片去背景** | 移除上传图片的背景，保留透明 PNG。 |
-| **AI Image Editor · AI 图片编辑** | 上传图片，用自然语言描述修改需求，通过图生图（image-to-image）模型完成编辑。 |
-| **AI Video Editor · AI 视频编辑** | 上传视频，用自然语言描述修改需求，通过参考生视频（reference-to-video）模型完成编辑。 |
+| **Product Hunt gallery** | 根据网站或产品信息生成风格统一的 Product Hunt 发布图。 |
+| **App Store Graphics** | 将应用截图做成风格统一的 App Store 展示图。 |
+| **Sketch to Image · 草图生图** | 输入 `/sketch-to-image`，在对话内绘制线条和文字；保存草图后可附加参考图，确认理解后用 GPT Image 2.5 Flare 生成。支持移动/旋转、字号、撤销重做。 |
+| **Image Text Editor · 图片文字编辑** | 编辑图片中的文字，尽量保留字体与版式；支持批量上传。 |
+| **Annotated Image Edit · 标注编辑** | 在图上标注点位并描述每处修改，做更精确的编辑。 |
+| **Image Layer Splitter · 图层拆分** | 框选对象，拆成独立的透明 PNG 图层。 |
+| **Long-form video · 长视频生成** | 规划分镜、生成多镜头片段，再用 FFmpeg 拼接。 |
+
+以上 Skills 之外，仍可用自然语言让 Agent 做开放式图片/视频编辑（含去背景等）。
 
 ## 长视频生成
 
@@ -165,7 +179,9 @@ Agent LLM 已锁定为 `moonshotai/kimi-k3`，界面无需再选择模型。连�
 
 视频拼接完成后，你仍可以通过对话要求 Agent 修改镜头或补充场景，整个创作过程都可以围绕与 Agent 的沟通展开。
 
-这套流程由[长视频生成 Skill](server/agent/skills/long-form-video.md) 定义，还有较多优化空间，例如引入声音参考以保持角色声音一致。欢迎通过 [Issue](https://github.com/saihhold-zhao/polox_ai/issues) 提出建议或参与改进。
+生成时可以附带 **参考声音（reference audio）**，让角色在不同镜头里更接近同一音色或声音方向（Seedance 参考生视频路径支持 `reference_audios`）。
+
+这套流程由[长视频生成 Skill](server/agent/skills/long-form-video.md) 定义，仍处于早期阶段。欢迎通过 [Issue](https://github.com/saihhold-zhao/polox_ai/issues) 提出建议或参与改进。
 
 ## 问题排查与反馈
 
