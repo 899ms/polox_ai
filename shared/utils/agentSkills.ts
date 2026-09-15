@@ -6,6 +6,15 @@ export const PUBLIC_AGENT_SKILLS = [
     name: 'Product Hunt gallery',
     description: 'Create consistent Product Hunt launch images from your website or product details.',
     keywords: 'product hunt gallery launch exhibition brand marketing',
+    placeholder: 'Enter your website URL…',
+  },
+  {
+    id: 'app-store-graphics',
+    icon: 'lucide:smartphone',
+    name: 'App Store Graphics',
+    description: 'Turn app screenshots into matching iPhone 17 Pro Max App Store graphics with a shared visual system.',
+    keywords: 'app store graphics iphone screenshot marketing preview 应用商店',
+    placeholder: 'Upload feature screenshots and logo, then add the app name and a short feature description…',
   },
   {
     id: 'sketch-to-image',
@@ -65,4 +74,12 @@ export function readSkillCommands(text: string) {
 export function stripSkillCommands(text: string) {
   return text.replace(/(?<!\S)\/([a-z0-9-]+)(?=\s|$)[ \t]*/g, (match, id) =>
     PUBLIC_AGENT_SKILLS.some(skill => skill.id === id) ? '' : match)
+}
+
+export function composerPlaceholderForSkills(skills: readonly { id: string, placeholder?: string }[]) {
+  for (const skill of skills) {
+    if (skill.placeholder)
+      return skill.placeholder
+  }
+  return skills.length ? 'What do you want to create next?' : ''
 }

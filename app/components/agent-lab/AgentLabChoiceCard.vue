@@ -34,6 +34,29 @@ const recommendation = computed(() => {
   return method ? method.options.find(option => option.id === 'annotate')?.label || '' : props.choice.recommendation
 })
 const isPending = computed(() => (props.state || 'pending') === 'pending')
+const promptExpanded = ref(false)
+const questionPromptExpanded = ref<Record<string, boolean>>({})
+const choicePrompt = computed(() => (props.choice.prompt || '').trim())
+function textNeedsExpand(value: string) {
+  const full = value.trim()
+  if (!full)
+    return false
+  const lines = full.split(/\n/).filter(line => line.trim().length > 0)
+  return lines.length > 2 || full.length > 140
+}
+const choicePromptNeedsExpand = computed(() => textNeedsExpand(choicePrompt.value))
+function questionPromptNeedsExpand(prompt: string) {
+  return textNeedsExpand(prompt)
+}
+function isQuestionPromptExpanded(id: string) {
+  return Boolean(questionPromptExpanded.value[id])
+}
+function toggleQuestionPrompt(id: string) {
+  questionPromptExpanded.value = {
+    ...questionPromptExpanded.value,
+    [id]: !questionPromptExpanded.value[id],
+  }
+}
 const selections = ref<Record<string, { optionId: string, text: string }>>({})
 const regionsByImage = ref<Record<string, ImageLayerRegion[]>>({})
 const sourceUrl = ref('')
@@ -63,6 +86,8 @@ watch(sourceUrl, () => { selecting.value = false }, { flush: 'sync' })
 watch(
   () => props.choice.id,
   () => {
+    promptExpanded.value = false
+    questionPromptExpanded.value = {}
     selections.value = {}
     regionsByImage.value = {}
     annotationPointsByImage.value = {}
@@ -202,19 +227,52 @@ const resolvedAnswers = computed(() => {
   >
     <AgentLabCardBorder v-if="isPending && !readOnly" tone="attention" />
     <CardHeader class="gap-1.5 px-4">
-      <div class="flex items-center justify-between gap-2">
-        <CardTitle class="text-sm font-medium">
-          {{ choice.prompt || 'A few choices' }}
-        </CardTitle>
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-start gap-2">
+            <div class="relative min-w-0 flex-1">
+              <CardTitle
+                class="text-sm font-medium whitespace-pre-wrap"
+                :class="!promptExpanded && choicePromptNeedsExpand ? 'line-clamp-2' : ''"
+              >
+                {{ choicePrompt || 'A few choices' }}
+              </CardTitle>
+              <button
+                v-if="!promptExpanded && choicePromptNeedsExpand"
+                type="button"
+                class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-card to-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Expand prompt"
+                @click="promptExpanded = true"
+              />
+            </div>
+            <button
+              v-if="choicePromptNeedsExpand"
+              type="button"
+              class="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              :aria-expanded="promptExpanded"
+              :aria-label="promptExpanded ? 'Collapse prompt' : 'Expand prompt'"
+              @click="promptExpanded = !promptExpanded"
+            >
+              <Icon
+                name="lucide:chevron-down"
+                class="size-3.5 transition-transform"
+                :class="promptExpanded ? 'rotate-180' : ''"
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+        </div>
         <Badge
           v-if="state === 'skipped'"
           variant="outline"
+          class="shrink-0"
         >
           Agent will decide
         </Badge>
         <Badge
           v-else-if="state === 'answered'"
           variant="outline"
+          class="shrink-0"
         >
           Saved
         </Badge>
@@ -247,9 +305,38 @@ const resolvedAnswers = computed(() => {
             >
               {{ question.title }}
             </span>
-            <span class="text-sm font-medium text-foreground">
-              {{ question.prompt }}
-            </span>
+            <div class="flex items-start gap-2">
+              <div class="relative min-w-0 flex-1">
+                <span
+                  class="block text-sm font-medium whitespace-pre-wrap text-foreground"
+                  :class="!isQuestionPromptExpanded(question.id) && questionPromptNeedsExpand(question.prompt) ? 'line-clamp-2' : ''"
+                >
+                  {{ question.prompt }}
+                </span>
+                <button
+                  v-if="!isQuestionPromptExpanded(question.id) && questionPromptNeedsExpand(question.prompt)"
+                  type="button"
+                  class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-card to-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Expand question"
+                  @click.stop.prevent="toggleQuestionPrompt(question.id)"
+                />
+              </div>
+              <button
+                v-if="questionPromptNeedsExpand(question.prompt)"
+                type="button"
+                class="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                :aria-expanded="isQuestionPromptExpanded(question.id)"
+                :aria-label="isQuestionPromptExpanded(question.id) ? 'Collapse question' : 'Expand question'"
+                @click.stop.prevent="toggleQuestionPrompt(question.id)"
+              >
+                <Icon
+                  name="lucide:chevron-down"
+                  class="size-3.5 transition-transform"
+                  :class="isQuestionPromptExpanded(question.id) ? 'rotate-180' : ''"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
           </legend>
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button

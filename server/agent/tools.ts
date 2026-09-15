@@ -594,7 +594,7 @@ function parseAskQuestion(raw: unknown, index: number, seen: Set<string>): Choic
   if (!raw || typeof raw !== 'object')
     return null
   const row = raw as Record<string, unknown>
-  const prompt = clipAsk(row.prompt ?? row.question ?? row.label, row.id === 'sketch_prompt' ? 8000 : row.id === 'sketch_understanding' ? 4000 : 280)
+  const prompt = clipAsk(row.prompt ?? row.question ?? row.label, row.id === 'sketch_prompt' ? 8000 : row.id === 'sketch_understanding' ? 4000 : 2000)
   if (!prompt)
     return null
   const optionSeen = new Set<string>()
@@ -663,7 +663,7 @@ export function parseAskUserArgs(raw: string): AskUserArgs {
     throw new Error('ask_user needs at least one question with options')
 
   return {
-    prompt: clipAsk(parsed.prompt ?? parsed.intro, 400),
+    prompt: clipAsk(parsed.prompt ?? parsed.intro, 2000),
     recommendation: questions.find(question => question.id === 'image_edit_method')?.options.find(option => option.id === 'annotate')?.label ?? clipAsk(parsed.recommendation ?? parsed.hint, 400),
     questions: standaloneImageEditQuestions(questions),
   }

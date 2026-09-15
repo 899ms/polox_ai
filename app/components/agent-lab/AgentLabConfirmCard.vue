@@ -33,9 +33,29 @@ function showPrompt(params: ConfirmationPayload['params']) {
 function visibleModelInput(params: ConfirmationPayload['params']) {
   const input = {
     ...(params.prompt ? { prompt: params.prompt } : {}),
-    ...params.modelInput,
+    ...(params.modelInput || {}),
+  }
+  // Prefer params.prompt as the single prompt row; drop a duplicate modelInput.prompt copy.
+  if (params.prompt && params.modelInput && 'prompt' in (params.modelInput as Record<string, unknown>)) {
+    input.prompt = params.prompt
   }
   return Object.fromEntries(Object.entries(input).filter(([key]) => !key.startsWith('_') && (key !== 'prompt' || showPrompt(params))))
+}
+
+const expandedParamKeys = ref<Record<string, boolean>>({})
+function paramValueText(value: unknown) {
+  return typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')
+}
+function paramNeedsClamp(value: unknown) {
+  const text = paramValueText(value)
+  return text.length > 120 || text.split('\n').length > 3
+}
+function isParamExpanded(jobId: string, key: string) {
+  return Boolean(expandedParamKeys.value[`${jobId}:${key}`])
+}
+function toggleParamExpand(jobId: string, key: string) {
+  const id = `${jobId}:${key}`
+  expandedParamKeys.value = { ...expandedParamKeys.value, [id]: !expandedParamKeys.value[id] }
 }
 
 const prompt = ref('')
@@ -46,6 +66,7 @@ const duration = ref(5)
 watch(
   () => props.confirmation,
   (value) => {
+    expandedParamKeys.value = {}
     const video = value.kind === 'video'
     const imageToVideo = value.params.videoMode === 'image'
     const seedance25 = value.params.videoFamily === 'seedance-2-5'
@@ -340,9 +361,7 @@ function emitConfirm() {
                 <AgentLabModelLogo :model-id="job.params.modelId" :model-name="job.modelName" />
                 <span>{{ [job.modelName, job.params.aspectRatio, job.params.resolution, job.params.duration ? `${job.params.duration}s` : ''].filter(Boolean).join(' · ') }}</span>
               </p>
-              <p v-if="showPrompt(job.params) && job.params.prompt" class="mt-1 line-clamp-1 text-xs text-muted-foreground group-open:hidden">
-                {{ job.params.prompt }}
-              </p>
+
             </div>
             <span class="text-xs text-muted-foreground group-open:rotate-180" aria-hidden="true">⌄</span>
           </summary>
@@ -355,8 +374,30 @@ function emitConfirm() {
                 <dt class="text-muted-foreground">
                   {{ String(key).replaceAll('_', ' ') }}
                 </dt>
-                <dd class="min-w-0 whitespace-pre-wrap break-all">
-                  {{ typeof value === 'object' ? JSON.stringify(value) : String(value) }}
+                <dd class="min-w-0">
+                  <div class="relative">
+                    <div
+                      class="whitespace-pre-wrap break-all"
+                      :class="!isParamExpanded(job.id, String(key)) && paramNeedsClamp(value) ? 'max-h-[3.75rem] overflow-hidden' : ''"
+                    >
+                      {{ paramValueText(value) }}
+                    </div>
+                    <button
+                      v-if="!isParamExpanded(job.id, String(key)) && paramNeedsClamp(value)"
+                      type="button"
+                      class="absolute inset-x-0 bottom-0 h-[1.25rem] bg-gradient-to-t from-card from-40% to-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      :aria-label="`Expand ${String(key)}`"
+                      @click.stop.prevent="toggleParamExpand(job.id, String(key))"
+                    />
+                  </div>
+                  <button
+                    v-if="paramNeedsClamp(value) && isParamExpanded(job.id, String(key))"
+                    type="button"
+                    class="mt-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                    @click.stop.prevent="toggleParamExpand(job.id, String(key))"
+                  >
+                    Show less
+                  </button>
                 </dd>
               </template>
             </dl>

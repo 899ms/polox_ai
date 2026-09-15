@@ -4,7 +4,7 @@ import { PUBLIC_AGENT_SKILLS } from '~~/shared/utils/agentSkills'
 
 const emit = defineEmits<{ select: [skillId: string] }>()
 
-const skills = [...PUBLIC_AGENT_SKILLS].sort((a, b) => Number(a.id === 'product-hunt-gallery') - Number(b.id === 'product-hunt-gallery'))
+const skills = [...PUBLIC_AGENT_SKILLS].sort((a, b) => Number(['product-hunt-gallery', 'app-store-graphics'].includes(a.id)) - Number(['product-hunt-gallery', 'app-store-graphics'].includes(b.id)))
 </script>
 
 <template>

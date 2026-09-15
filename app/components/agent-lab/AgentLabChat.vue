@@ -7,7 +7,7 @@ import type { AgentChatMessage, AgentConfirmPolicy, AgentImage, AgentListItem, A
 import { ArrowUp, ChevronDown, Paperclip, Plus, Square, X } from 'lucide-vue-next'
 import { normalizeComposerSelection } from '~~/shared/utils/agentComposerSelection'
 import { AGENT_MODELS, agentModelLogo, modelMention, readModelMentions, stripModelMentions } from '~~/shared/utils/agentModels'
-import { findComposerCommand, PUBLIC_AGENT_SKILLS, readSkillCommands, searchAgentSkills, stripSkillCommands } from '~~/shared/utils/agentSkills'
+import { composerPlaceholderForSkills, findComposerCommand, PUBLIC_AGENT_SKILLS, readSkillCommands, searchAgentSkills, stripSkillCommands } from '~~/shared/utils/agentSkills'
 import { isMediaVideoUrl } from '~~/shared/utils/seedance25'
 import { SKETCH_TO_IMAGE_TOOL } from '~~/shared/utils/sketchToImage'
 import { agentComposerPlaceholder } from '~/utils/agentComposerPlaceholder'
@@ -1162,7 +1162,7 @@ function setActiveAgent(value: unknown) {
           :class="compactComposer
             ? 'max-md:max-h-10 max-md:min-h-10 max-md:py-2 md:max-h-[min(40vh,20rem)] md:min-h-[88px]'
             : 'max-h-[min(40vh,20rem)] min-h-[88px]'"
-          :placeholder="selectedSkills.some(skill => skill.id === 'product-hunt-gallery') ? 'Enter your website URL…' : selectedSkills.length ? 'What do you want to create next?' : sketchVisible ? 'Describe how you want your sketch to look (optional)…' : agentComposerPlaceholder(selectedModels)"
+          :placeholder="composerPlaceholderForSkills(selectedSkills) || (sketchVisible ? 'Describe how you want your sketch to look (optional)…' : agentComposerPlaceholder(selectedModels))"
           aria-label="Message to agent"
           :aria-expanded="Boolean(mention)"
           :aria-controls="mention ? modelListId : undefined"
