@@ -28,6 +28,23 @@ function httpUrl(value: unknown) {
 export function isAgentSessionId(value: string) {
   return SESSION_ID_RE.test(value)
 }
+function historyCardPresent(message: {
+  confirmation?: unknown
+  choice?: unknown
+  confirmationState?: unknown
+  choiceState?: unknown
+  choiceAnswers?: unknown
+  resolvedParams?: unknown
+}) {
+  return Boolean(
+    message.confirmation
+    || message.choice
+    || message.resolvedParams
+    || (message.confirmationState && message.confirmationState !== '')
+    || (message.choiceState && message.choiceState !== '')
+    || (Array.isArray(message.choiceAnswers) && message.choiceAnswers.length),
+  )
+}
 function cardRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     return null
@@ -148,7 +165,10 @@ export async function upsertAgentChat(input: AgentChatUpsertInput) {
   const nextImages = input.replaceImages === false && existing?.images?.length
     ? mergeImages(existing.images, images)
     : images
-  await archiveAgentUiHistory(sessionId, messages, images)
+  // Service SSE snapshots (replaceMessages:false) are card-less; archiving them
+  // used to $set confirmation/choice null and wipe media on AgentHistory rows.
+  if (replaceMessages || messages.some(message => historyCardPresent(message)))
+    await archiveAgentUiHistory(sessionId, messages, images)
   const stats = statsFrom(nextMessages, nextImages)
   const update: Record<string, unknown> = {
     lastEventAt: new Date(),

@@ -74,8 +74,15 @@ export async function archiveAgentUiHistory(sessionId: string, messages: AgentHi
         message: AgentHistoryMessage
       } | undefined
       const canonicalId = existing?.messageId
+      // Plain service snapshots must not erase cards saved by the browser.
+      const metadata = Object.fromEntries(['confirmation', 'resolvedParams', 'confirmationState', 'confirmationReason', 'confirmationCredits', 'choice', 'choiceState', 'choiceAnswers'].map((key) => {
+        const value = message[key as keyof AgentHistoryMessage]
+        const present = value !== undefined && value !== null && value !== '' && value !== 0 && (!Array.isArray(value) || value.length > 0)
+        return [key, present ? value : existing?.message[key as keyof AgentHistoryMessage]]
+      }))
       return {
         ...message,
+        ...metadata,
         content: existing && /^<think(?:ing)?>/i.test(existing.message.content) && historyContent(existing.message.content) === historyContent(message.content)
           ? existing.message.content
           : message.content,
@@ -85,16 +92,69 @@ export async function archiveAgentUiHistory(sessionId: string, messages: AgentHi
     await archiveBatch(sessionId, rows, images)
   })
 }
+function historyCardPresent(value: unknown) {
+  if (value === undefined || value === null || value === '')
+    return false
+  if (Array.isArray(value))
+    return value.length > 0
+  return true
+}
+function linkHistoryImages(message: AgentHistoryMessage, images: AgentHistoryImage[]) {
+  const byId = new Map(images.map(image => [image.id, image]))
+  const ids = new Set<string>(message.imageIds || [])
+  const jobs = (message.confirmation as { jobs?: Array<{ id?: string }> } | null | undefined)?.jobs || []
+  for (const job of jobs) {
+    const jobId = String(job?.id || '')
+    if (!jobId)
+      continue
+    for (const image of images) {
+      if (image.id === jobId || (image.id.startsWith(`${jobId}_`) && /^\d+$/.test(image.id.slice(jobId.length + 1))))
+        ids.add(image.id)
+    }
+  }
+  const fromIds = [...ids].flatMap(id => byId.has(id) ? [byId.get(id)!] : [])
+  const fromUrls = images.filter(image => image.url && message.content.includes(image.url))
+  const seen = new Set<string>()
+  return [...fromIds, ...fromUrls].filter((image) => {
+    const key = image.url || image.id
+    if (seen.has(key))
+      return false
+    seen.add(key)
+    return true
+  }).slice(0, 16)
+}
 async function writeHistory(sessionId: string, messages: AgentHistoryMessage[], images: AgentHistoryImage[]) {
   if (!messages.length)
     return
+  const cardKeys = new Set(['confirmation', 'resolvedParams', 'confirmationState', 'confirmationReason', 'confirmationCredits', 'choice', 'choiceState', 'choiceAnswers'])
+  const existingRows = await AgentHistory.find({
+    sessionId,
+    messageId: { $in: messages.map(message => message.id) },
+  }).select('messageId message images').lean()
+  const existingById = new Map(existingRows.map(row => [row.messageId, row]))
   const operations = messages.filter(message => !isAgentTransientMessage(message)).map((message) => {
-    const linked = images.filter(image => message.imageIds?.includes(image.id) || (image.url && message.content.includes(image.url))).slice(0, 16)
+    const existing = existingById.get(message.id)
+    const linked = linkHistoryImages(message, images)
+    // Never replace a richer archived media set with a thinner service snapshot.
+    const nextImages = linked.length
+      ? [...new Map([...(existing?.images || []), ...linked].map(image => [image.id, image])).values()].slice(0, 16)
+      : (existing?.images || [])
+    const fields: Record<string, unknown> = {
+      ...message,
+      imageIds: nextImages.length ? nextImages.map(image => image.id) : (message.imageIds || existing?.message?.imageIds || []),
+    }
+    for (const key of cardKeys) {
+      if (!historyCardPresent(fields[key]))
+        delete fields[key]
+    }
     return {
       updateOne: {
         filter: { sessionId, messageId: message.id },
         update: {
-          $set: { ...Object.fromEntries(Object.entries({ ...message, imageIds: linked.map(image => image.id) }).filter(([, value]) => value !== undefined).map(([key, value]) => [`message.${key}`, value])), images: linked },
+          $set: {
+            ...Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [`message.${key}`, value])),
+            images: nextImages,
+          },
           $setOnInsert: { sessionId, messageId: message.id },
         },
         upsert: true,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AgentHistoryImage, AgentHistoryPage } from '~~/shared/types/agentHistory'
-import type { AgentImage, ConfirmationPayload } from '~/composables/useAgentLab'
+import type { AgentImage, ChoiceAnswer, ChoicePayload, ConfirmationPayload } from '~/composables/useAgentLab'
 import { messageMedia } from '~/utils/agentMessageMedia'
 import { presentAgentResults } from '~/utils/agentResultPresentation'
 
@@ -25,13 +25,17 @@ let retryDirection: 'initial' | 'older' = 'initial'
 const savedMessages = computed(() => (page.value?.messages || []).filter(message => !props.excludeIds?.some(id => id.replace(/^ui:/, '') === message.id.replace(/^ui:/, ''))).map((message) => {
   const card = message.confirmation
   const params = card?.params as ConfirmationPayload['params'] | undefined
-  const confirmation = card && typeof card.id === 'string' && params && typeof params.prompt === 'string'
+  // Relaxed: require confirmation id + params object (prompt optional) so older cards still render.
+  const confirmation = card && typeof card.id === 'string' && params && typeof params === 'object'
     ? card as unknown as ConfirmationPayload
     : null
   const state = message.confirmationState
   return {
     ...message,
     confirmation,
+    choice: message.choice && typeof message.choice.id === 'string' && Array.isArray(message.choice.questions) ? message.choice as unknown as ChoicePayload : undefined,
+    choiceState: (['pending', 'answered', 'skipped'].includes(message.choiceState || '') ? message.choiceState : undefined) as 'pending' | 'answered' | 'skipped' | undefined,
+    choiceAnswers: message.choiceAnswers as unknown as ChoiceAnswer[] | undefined,
     cardState: (state === 'confirmed' || state === 'cancelled' || state === 'blocked' ? state : 'pending') as 'pending' | 'confirmed' | 'cancelled' | 'blocked',
     resolvedParams: message.resolvedParams as ConfirmationPayload['params'] | undefined,
   }
@@ -40,6 +44,7 @@ const savedMessages = computed(() => (page.value?.messages || []).filter(message
 const historyMessages = computed(() => {
   const saved = new Map(savedMessages.value.map(message => [message.id, message]))
   return presentAgentResults(savedMessages.value.map(message => ({
+    ...message,
     id: message.id,
     role: message.role,
     content: message.content,
@@ -48,6 +53,9 @@ const historyMessages = computed(() => {
     confirmation: message.confirmation || undefined,
     confirmationState: message.confirmation || message.confirmationState ? message.cardState : undefined,
     resolvedParams: message.resolvedParams,
+    choice: message.choice || undefined,
+    choiceState: message.choiceState,
+    choiceAnswers: message.choiceAnswers,
   })), thumbsFor).map(message => ({ ...saved.get(message.id), ...message, cardState: message.confirmationState }))
 })
 
@@ -160,7 +168,7 @@ defineExpose({ load })
 </script>
 
 <template>
-  <section :class="embedded ? 'shrink-0' : 'flex min-h-0 flex-1 flex-col'" aria-label="Saved chat history" :aria-busy="loading">
+  <section class="min-w-0 max-w-full [overflow-wrap:anywhere]" :class="embedded ? 'shrink-0' : 'flex min-h-0 flex-1 flex-col'" aria-label="Saved chat history" :aria-busy="loading">
     <div v-if="error" class="px-4 py-2 text-sm text-destructive" role="alert">
       {{ error }}
       <button type="button" class="ml-2 underline" :disabled="loading" @click="load(retryDirection)">
@@ -176,7 +184,7 @@ defineExpose({ load })
           :images="thumbsFor(message)"
           lazy
         >
-          <template v-if="message.confirmation || message.confirmationState || message.confirmationReason || message.choiceState || message.choiceAnswers?.length" #default>
+          <template v-if="message.confirmation || message.confirmationState || message.confirmationReason || message.confirmationCredits || message.choice || message.choiceState || message.choiceAnswers?.length" #default>
             <AgentLabConfirmCard
               v-if="message.confirmation"
               :confirmation="message.confirmation"
@@ -184,13 +192,21 @@ defineExpose({ load })
               :resolved-params="message.resolvedParams"
               read-only
             />
-            <p v-else-if="message.confirmationState || message.confirmationReason" class="mt-2 text-xs text-muted-foreground">
+            <p v-else-if="message.confirmationState || message.confirmationReason || message.confirmationCredits" class="mt-2 text-xs text-muted-foreground">
               {{ message.confirmationState }} {{ message.confirmationReason }}
+              <span v-if="message.confirmationCredits"> · {{ message.confirmationCredits }} credits</span>
             </p>
-            <p v-if="message.choiceState" class="mt-2 text-xs text-muted-foreground">
+            <AgentLabChoiceCard
+              v-if="message.choice"
+              :choice="message.choice"
+              :state="message.choiceState"
+              :answers="message.choiceAnswers"
+              read-only
+            />
+            <p v-else-if="message.choiceState" class="mt-2 text-xs text-muted-foreground">
               {{ message.choiceState }}
             </p>
-            <p v-for="(answer, index) in message.choiceAnswers || []" :key="index" class="mt-1 text-sm">
+            <p v-for="(answer, index) in (message.choice ? [] : message.choiceAnswers) || []" :key="index" class="mt-1 text-sm">
               {{ answer.label || answer.text || answer.optionId || (answer.skipped ? 'Skipped' : '') }}
             </p>
           </template>
