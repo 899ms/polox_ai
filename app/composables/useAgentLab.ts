@@ -1153,10 +1153,15 @@ function createAgentLab(options?: {
       byKey.set(key, previous ? mergeStoredAgents(previous, agent) : agent)
     }
     const merged = [...byKey.values()]
-    const nonempty = merged.filter(agent => !isEmptyStoredAgent(agent))
+    const activeId = activeAgentId.value
+    // Keep the currently active agent even when it is still empty (e.g. homepage
+    // Sketch to Image just called createAgent and only has a draft skill mention).
+    // Dropping it here would fall back to an older nonempty agent after navigate.
+    const nonempty = merged.filter(agent => !isEmptyStoredAgent(agent) || agent.id === activeId)
     storedAgents.value = nonempty.length ? nonempty : merged
-    const active = storedAgents.value.find(agent => agent.id === activeAgentId.value && !isEmptyStoredAgent(agent))
-      || storedAgents.value.find(agent => agent.sessionId === sessionId.value)
+    const active = storedAgents.value.find(agent => agent.id === activeId)
+      || storedAgents.value.find(agent => agent.sessionId === sessionId.value && !isEmptyStoredAgent(agent))
+      || storedAgents.value.find(agent => !isEmptyStoredAgent(agent))
       || storedAgents.value[0]
     if (active)
       applyAgent(active)

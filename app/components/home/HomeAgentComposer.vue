@@ -5,6 +5,7 @@ import { ChevronDown, Folder, FolderOpen, Plus } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { DEFAULT_PROJECT_NAME } from '~~/shared/types/project'
 import { readModelMentions } from '~~/shared/utils/agentModels'
+import { readSkillCommands } from '~~/shared/utils/agentSkills'
 import { readErrorMessage } from '~~/shared/utils/apiError'
 import { SKETCH_TO_IMAGE_TOOL } from '~~/shared/utils/sketchToImage'
 
@@ -19,8 +20,11 @@ const props = withDefaults(defineProps<{
 })
 const { projects, selectedProjectId, createProject } = useProjects()
 const { enterSelectedProject, resolveTargetProjectId } = useAgentWorkspaceNav()
-const { sessionId: agentSessionId, messages, images, allImages, status, waitingForUserConfirm, waitingForUserChoice, pending, draft, attachments, attaching, error, sendMessage, stopAgent, stopping, attachFiles, attachUrls, removeAttachment, resolveConfirmation, resolveChoice, qualityPreference, confirmPolicy, agents, activeAgentId, canCreateAgent, canSwitchAgent, createAgent, selectAgent, queueNotice, ensureHydrated } = useAgentLab({ projectId: selectedProjectId })
-const hasSketch = computed(() => readModelMentions(draft.value, true).includes(SKETCH_TO_IMAGE_TOOL))
+const { sessionId: agentSessionId, messages, images, allImages, status, waitingForUserConfirm, waitingForUserChoice, pending, draft, attachments, attaching, error, sendMessage, stopAgent, stopping, attachFiles, attachUrls, removeAttachment, resolveConfirmation, resolveChoice, qualityPreference, confirmPolicy, agents, activeAgentId, canCreateAgent, canSwitchAgent, createAgent, selectAgent, queueNotice, ensureHydrated, flush } = useAgentLab({ projectId: selectedProjectId })
+const hasSketch = computed(() =>
+  readModelMentions(draft.value, true).includes(SKETCH_TO_IMAGE_TOOL)
+  || readSkillCommands(draft.value).some(skill => skill.id === SKETCH_TO_IMAGE_TOOL),
+)
 const openingSketch = ref(false)
 
 async function openSketchInProject() {
@@ -42,6 +46,9 @@ async function openSketchInProject() {
     attachments.value = sketchAttachments
     images.value = sketchImages
     qualityPreference.value = 'custom'
+    // Persist the new agent + draft before route change so remote hydrate cannot
+    // discard the empty agent and reselect an older conversation.
+    flush()
     await navigateTo(`/projects/${encodeURIComponent(id)}?mode=agent`)
   }
   catch (error) {

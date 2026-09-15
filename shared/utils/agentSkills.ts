@@ -22,6 +22,13 @@ export const PUBLIC_AGENT_SKILLS = [
     keywords: 'image text editor typography 图片 文字 编辑',
   },
   {
+    id: 'image-annotation-edit',
+    icon: 'lucide:map-pin',
+    name: 'Annotated Image Edit',
+    description: 'Mark points on an image and describe each change to edit precisely.',
+    keywords: 'annotate annotation image edit point pin 标注 编辑',
+  },
+  {
     id: 'image-layer-splitter',
     icon: 'lucide:layers',
     name: 'Image Layer Splitter',

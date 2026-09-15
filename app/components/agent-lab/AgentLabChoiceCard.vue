@@ -80,6 +80,14 @@ watch(
         }
       }
     }
+    // Open the annotation canvas immediately when Annotate is the recommended method.
+    const method = questions.value.find(question => question.id === 'image_edit_method')
+    if (method && method.recommendedId === 'annotate' && !selections.value.image_edit_method && method.options.some(option => option.id === 'annotate')) {
+      selections.value = {
+        ...selections.value,
+        image_edit_method: { optionId: 'annotate', text: '' },
+      }
+    }
   },
   { immediate: true },
 )

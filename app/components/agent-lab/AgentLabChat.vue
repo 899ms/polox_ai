@@ -744,7 +744,7 @@ function onDraftKeydown(event: KeyboardEvent) {
       }
     }
   }
-  if (event.key !== 'Enter' || !event.shiftKey || event.repeat || event.isComposing)
+  if (event.key !== 'Enter' || event.shiftKey || event.repeat || event.isComposing)
     return
   event.preventDefault()
   if (canSend.value)
@@ -1251,14 +1251,6 @@ function setActiveAgent(value: unknown) {
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
-            <KbdGroup
-              v-if="!canStop"
-              class="hidden md:inline-flex"
-              aria-label="Shift Enter to send"
-            >
-              <Kbd>Shift</Kbd>
-              <Kbd>Enter</Kbd>
-            </KbdGroup>
             <InputGroupButton
               v-if="canStop"
               type="submit"
@@ -1278,7 +1270,7 @@ function setActiveAgent(value: unknown) {
               size="sm"
               class="rounded-lg"
               :disabled="!canSend"
-              aria-keyshortcuts="Shift+Enter"
+              aria-keyshortcuts="Enter"
             >
               <Spinner v-if="submittingSketch" class="size-4" />
               <ArrowUp v-else data-icon="inline-start" />
