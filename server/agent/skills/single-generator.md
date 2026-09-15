@@ -2,7 +2,7 @@
 
 Use this skill when the user invokes a generator for a standalone image, edit, cutout, layer split, or single video clip, especially through an explicit model name or @[Name](model:id). Follow model-planning for exact model selection and schema validation. For a long film, storyboard, or multi-shot production, use long-form-video instead; do not add a second set of standalone checkpoints to its intermediate generations.
 
-For edits to an existing image, follow image-editing first. The editing method card contains only `image_edit_method`, never editing-goal, creative-direction, or parameter questions. This overrides batching unresolved questions at this checkpoint.
+For edits to an existing image, follow image-editing first. If the user already stated a clear modification request, image-editing proceeds to generation without the annotate/describe card; only ask annotate vs describe when no clear change was specified. The editing method card contains only `image_edit_method`, never editing-goal, creative-direction, or parameter questions. This overrides batching unresolved questions at this checkpoint.
 
 ## Check the brief before generation
 
