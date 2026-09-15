@@ -46,6 +46,7 @@ PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own [WaveSpeed](https:
 - Result evaluation asks before regenerating on a suspected mismatch (no silent auto-retry)
 - Long-form video can use **reference audio** for more consistent character voices
 - README Skills section aligned with the `/` skill picker
+- **Fix:** Agent chat history no longer drops confirmation cards, ask-user prompts, or media while the agent is thinking or waiting for confirmation.
 - Miscellaneous small fixes
 
 ### September 13, 2026 — v1.1.0
