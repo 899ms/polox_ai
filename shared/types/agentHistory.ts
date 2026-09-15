@@ -8,7 +8,8 @@ export interface AgentHistoryMessage {
   resolvedParams?: Record<string, unknown> | null
   confirmationState?: string
   confirmationReason?: string
-
+  confirmationCredits?: number
+  choice?: Record<string, unknown> | null
   choiceState?: string
   choiceAnswers?: Record<string, unknown>[]
 }
