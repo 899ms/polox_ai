@@ -2,6 +2,11 @@
 import { X } from 'lucide-vue-next'
 
 const { item, close } = useMediaLightbox()
+const route = useRoute()
+watch(() => route.fullPath, () => {
+  if (item.value)
+    close()
+})
 const isVideo = computed(() => item.value?.kind === 'video')
 const label = computed(() => item.value?.alt || (isVideo.value ? 'Generated video' : 'Generated image'))
 
