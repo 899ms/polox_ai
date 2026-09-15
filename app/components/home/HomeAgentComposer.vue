@@ -61,11 +61,14 @@ async function openSketchInProject() {
   }
 }
 
-onMounted(() => {
-  watch(hasSketch, (selected) => {
-    if (selected)
-      void openSketchInProject()
-  }, { immediate: true })
+// Only open when sketch becomes newly selected (homepage skill click).
+// Do not re-open on mount when returning from a project that still has
+// /sketch-to-image in the shared lab draft — that bounced users back into
+// the waiting sketch agent.
+watch(hasSketch, (selected, wasSelected) => {
+  if (!selected || wasSelected)
+    return
+  void openSketchInProject()
 })
 
 const projectJobs = ref<GenerationJobPublic[]>([])
