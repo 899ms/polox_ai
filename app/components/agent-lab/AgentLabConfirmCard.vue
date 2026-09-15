@@ -375,29 +375,38 @@ function emitConfirm() {
                   {{ String(key).replaceAll('_', ' ') }}
                 </dt>
                 <dd class="min-w-0">
-                  <div class="relative">
-                    <div
-                      class="whitespace-pre-wrap break-all"
-                      :class="!isParamExpanded(job.id, String(key)) && paramNeedsClamp(value) ? 'max-h-[3.75rem] overflow-hidden' : ''"
-                    >
-                      {{ paramValueText(value) }}
+                  <div class="flex items-start gap-1">
+                    <div class="relative min-w-0 flex-1">
+                      <div
+                        class="whitespace-pre-wrap break-all"
+                        :class="!isParamExpanded(job.id, String(key)) && paramNeedsClamp(value) ? 'max-h-[3.75rem] overflow-hidden' : ''"
+                      >
+                        {{ paramValueText(value) }}
+                      </div>
+                      <button
+                        v-if="!isParamExpanded(job.id, String(key)) && paramNeedsClamp(value)"
+                        type="button"
+                        class="absolute inset-x-0 bottom-0 h-[1.25rem] bg-gradient-to-t from-card from-40% to-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        :aria-label="`Expand ${String(key)}`"
+                        @click.stop.prevent="toggleParamExpand(job.id, String(key))"
+                      />
                     </div>
                     <button
-                      v-if="!isParamExpanded(job.id, String(key)) && paramNeedsClamp(value)"
+                      v-if="paramNeedsClamp(value)"
                       type="button"
-                      class="absolute inset-x-0 bottom-0 h-[1.25rem] bg-gradient-to-t from-card from-40% to-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      :aria-label="`Expand ${String(key)}`"
+                      class="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      :aria-expanded="isParamExpanded(job.id, String(key))"
+                      :aria-label="isParamExpanded(job.id, String(key)) ? `Collapse ${String(key)}` : `Expand ${String(key)}`"
                       @click.stop.prevent="toggleParamExpand(job.id, String(key))"
-                    />
+                    >
+                      <Icon
+                        name="lucide:chevron-down"
+                        class="size-3.5 transition-transform"
+                        :class="isParamExpanded(job.id, String(key)) ? 'rotate-180' : ''"
+                        aria-hidden="true"
+                      />
+                    </button>
                   </div>
-                  <button
-                    v-if="paramNeedsClamp(value) && isParamExpanded(job.id, String(key))"
-                    type="button"
-                    class="mt-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline"
-                    @click.stop.prevent="toggleParamExpand(job.id, String(key))"
-                  >
-                    Show less
-                  </button>
                 </dd>
               </template>
             </dl>
