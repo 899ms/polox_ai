@@ -830,7 +830,7 @@ function confirmationModel(kind: ConfirmationPayload['kind'], imageArgs?: Genera
   if (kind === 'mixed')
     return { modelName: 'Multiple models', task: 'Mixed jobs' }
   return {
-    modelName: 'GPT Image 2',
+    modelName: imageArgs?.input_urls.length ? 'GPT Image 2.5 Sunburst' : 'GPT Image 2',
     task: imageArgs?.input_urls.length ? 'Image to Image' : 'Text to Image',
   }
 }

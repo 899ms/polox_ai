@@ -201,6 +201,23 @@ watch(draft, (text) => {
   if (!text)
     mention.value = null
 })
+
+const route = useRoute()
+watch(() => route.fullPath, () => { mention.value = null })
+function clearMentionOnBlur() {
+  mention.value = null
+}
+onMounted(() => {
+  if (!import.meta.client)
+    return
+  window.addEventListener('blur', clearMentionOnBlur)
+})
+onUnmounted(() => {
+  if (!import.meta.client)
+    return
+  window.removeEventListener('blur', clearMentionOnBlur)
+})
+
 const pinnedToBottom = ref(true)
 const historyPanel = ref<{
   load: () => Promise<void>
@@ -214,6 +231,82 @@ const STICKY_THRESHOLD = 96
 const scroller = ref<HTMLElement | null>(null)
 const transcript = ref<HTMLElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+const fileDropActive = ref(false)
+let fileDragDepth = 0
+
+const ATTACH_ACCEPT = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/aac',
+  'audio/ogg',
+  'audio/mp4',
+])
+
+function isFileDrag(event: DragEvent) {
+  const types = event.dataTransfer?.types
+  if (!types)
+    return false
+  return [...types].includes('Files')
+}
+
+function filesFromDrop(event: DragEvent) {
+  const list = event.dataTransfer?.files
+  if (!list?.length)
+    return [] as File[]
+  return [...list].filter((file) => {
+    if (ATTACH_ACCEPT.has(file.type))
+      return true
+    // Some browsers omit type for audio/images; fall back to extension.
+    const name = file.name.toLowerCase()
+    return /\.(jpe?g|png|webp|gif|mp3|wav|aac|ogg|m4a)$/.test(name)
+  })
+}
+
+function onComposerDragEnter(event: DragEvent) {
+  if (!isFileDrag(event) || composerLocked.value)
+    return
+  event.preventDefault()
+  fileDragDepth += 1
+  fileDropActive.value = true
+}
+
+function onComposerDragOver(event: DragEvent) {
+  if (!isFileDrag(event) || composerLocked.value)
+    return
+  event.preventDefault()
+  if (event.dataTransfer)
+    event.dataTransfer.dropEffect = 'copy'
+  fileDropActive.value = true
+}
+
+function onComposerDragLeave(event: DragEvent) {
+  if (!isFileDrag(event))
+    return
+  event.preventDefault()
+  fileDragDepth = Math.max(0, fileDragDepth - 1)
+  if (!fileDragDepth)
+    fileDropActive.value = false
+}
+
+function onComposerDrop(event: DragEvent) {
+  if (!isFileDrag(event))
+    return
+  event.preventDefault()
+  fileDragDepth = 0
+  fileDropActive.value = false
+  if (composerLocked.value)
+    return
+  const files = filesFromDrop(event)
+  if (files.length)
+    emit('attach', files)
+}
+
 let programmaticScroll = false
 let lastScrollTop = 0
 async function openHistory() {
@@ -717,7 +810,27 @@ function setActiveAgent(value: unknown) {
 </script>
 
 <template>
-  <section class="flex min-h-0 flex-col bg-sidebar" :class="composerOnly ? undefined : 'h-full'">
+  <section
+    class="relative flex min-h-0 flex-col bg-sidebar"
+    :class="[
+      composerOnly ? undefined : 'h-full',
+      fileDropActive ? 'ring-2 ring-inset ring-primary' : undefined,
+    ]"
+    @dragenter="onComposerDragEnter"
+    @dragover="onComposerDragOver"
+    @dragleave="onComposerDragLeave"
+    @drop="onComposerDrop"
+  >
+    <div
+      v-if="fileDropActive"
+      class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/70"
+      aria-hidden="true"
+    >
+      <div class="rounded-xl border border-dashed border-primary bg-card/90 px-4 py-3 text-sm font-medium text-foreground shadow-sm">
+        Drop to attach
+      </div>
+    </div>
+
     <div
       v-if="!composerOnly"
       class="flex items-center justify-between gap-2 border-b border-border px-4 py-3"

@@ -36,7 +36,7 @@ export const openAiTools = [
     type: 'function',
     function: {
       name: GENERATE_IMAGE_TOOL,
-      description: 'Generate or edit one still with GPT Image 2. Call once per image. For several images, call it several times in the SAME turn. To edit, pass input_urls (uploaded stills, previous results, or "latest"). Omit input_urls for text-to-image.',
+      description: 'Generate or edit one still. Text-to-image uses GPT Image 2; edits with input_urls use GPT Image 2.5 Sunburst Image to Image. Call once per image. For several images, call it several times in the SAME turn. To edit, pass input_urls (uploaded stills, previous results, or "latest"). Omit input_urls for text-to-image.',
       parameters: {
         type: 'object',
         additionalProperties: false,

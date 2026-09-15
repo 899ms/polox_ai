@@ -523,7 +523,7 @@ function publicPending(pending: AgentSession['pendingConfirmation']): Confirmati
     ...(inputUrls.length ? { inputUrls } : {}),
   }
   if (payload.kind === 'image') {
-    payload.modelName = payload.modelName || 'GPT Image 2'
+    payload.modelName = payload.modelName || (inputUrls.length ? 'GPT Image 2.5 Sunburst' : 'GPT Image 2')
     payload.task = inputUrls.length ? 'Image to Image' : (payload.task || 'Text to Image')
   }
   return payload
