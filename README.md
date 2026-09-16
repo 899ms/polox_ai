@@ -39,9 +39,19 @@
 
 This is the open-source edition of [PoloX AI](https://polox.ai), a creative platform in the same space as [Lovart](https://lovart.ai) and [Crepal](https://crepal.ai). PoloX takes an **agent-native** approach: agent conversations and an infinite canvas bring creation, generation, and editing into one continuous workflow. Describe what you want, work with the agent, and refine the results on the canvas.
 
-PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own [WaveSpeed](https://wavespeed.ai) API key; no PoloX account or subscription is required. Projects, conversations, generation history, and media are stored on your machine. AI inference uses external providers, so relevant inputs are sent to those services and their API charges apply. WaveSpeed supports checkout with credit cards, WeChat Pay, and Alipay.
+PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own [WaveSpeed](https://wavespeed.ai) API key; no PoloX account or subscription is required. Projects, asset libraries, conversations, generation history, and media are stored on your machine. AI inference uses external providers, so relevant inputs are sent to those services and their API charges apply. WaveSpeed supports checkout with credit cards, WeChat Pay, and Alipay.
 
 ## Updates
+
+### September 16, 2026 — v1.3.0
+
+- Added **Asset Libraries**: keep shared images, video, and audio on your machine and reuse them across projects
+- Import library assets into chat with `@` (searchable third column next to project assets)
+- Save canvas results into a library from the project page
+- Improved **Image Layer Splitter**: the agent inspects the image, then asks you to Confirm / Adjust before splitting, with one target per line
+- Wider canvas zoom range (about 2%–800%)
+- Clearer delete copy: removing an asset takes it out of the **project**, not a library
+- Miscellaneous small fixes and polish
 
 ### September 16, 2026 — v1.2.0
 
@@ -115,7 +125,7 @@ pnpm dev
 
 Open [http://localhost:3001](http://localhost:3001) and keep the terminal running. Press `Ctrl+C` to stop the server.
 
-The home page **Skills** catalog currently includes Product Hunt gallery, App Store Graphics, Sketch to Image, Image Text Editor, Annotated Image Edit, Image Layer Splitter, and Long-form video. Select a card or type `/` in the agent composer to pick a skill. Starting a sketch from home creates a new agent in your project. Product Hunt website inspection uses Playwright Chromium; on Linux, install its system dependencies with `pnpm browser:install:linux`.
+Use **Asset Libraries** in the sidebar to import shared media, then `@`-mention those assets in any project. The home page **Skills** catalog currently includes Product Hunt gallery, App Store Graphics, Sketch to Image, Image Text Editor, Annotated Image Edit, Image Layer Splitter, and Long-form video. Select a card or type `/` in the agent composer to pick a skill. Starting a sketch from home creates a new agent in your project. Product Hunt website inspection uses Playwright Chromium; on Linux, install its system dependencies with `pnpm browser:install:linux`.
 
 ### FFmpeg for video concatenation
 
@@ -200,7 +210,7 @@ If you find a bug or an improvement that would help other users, please [open an
 
 ## Local data
 
-PoloX stores its SQLite database at `.data/polox.sqlite` and media under `.data/media`. Back up the entire `.data` directory with the server stopped to preserve your projects and files. API keys are stored in the local database, so keep backups private.
+PoloX stores its SQLite database at `.data/polox.sqlite` and media under `.data/media`. Back up the entire `.data` directory with the server stopped to preserve your projects, asset libraries, and files. API keys are stored in the local database, so keep backups private.
 
 This edition is intended for local use. Its workspace routes do not require authentication; keep the app on your machine or a private network.
 

@@ -590,6 +590,19 @@ function parseAskOption(raw: unknown, index: number, seen: Set<string>): ChoiceO
   }
 }
 
+
+function formatLayerSplitConfirmPrompt(prompt: string) {
+  const text = prompt.replace(/\r\n/g, '\n').trim()
+  if (!text || /\n\s*Box\s+\d+/i.test(text))
+    return text
+  // Split packed "Box 1 ... Box 2 ..." prose onto separate lines for the confirm card.
+  const withBreaks = text
+    .replace(/\s*(Box\s+\d+\b)/gi, '\n$1')
+    .replace(/^\n+/, '')
+    .replace(/\n{3,}/g, '\n\n')
+  return withBreaks.trim()
+}
+
 function parseAskQuestion(raw: unknown, index: number, seen: Set<string>): ChoiceQuestion | null {
   if (!raw || typeof raw !== 'object')
     return null
@@ -614,6 +627,15 @@ function parseAskQuestion(raw: unknown, index: number, seen: Set<string>): Choic
   seen.add(unique)
   // Normalize Image Layer Splitter option ids: the model may emit 'draw'/'describe'
   // instead of the canonical 'draw_boxes'/'describe_layers' that the UI and loop expect.
+
+  if (unique === 'layer_split_confirm') {
+    for (const option of options) {
+      if (['yes', 'ok', 'correct', 'looks_good', 'looks-good', 'proceed', 'confirm_extract', 'confirm-extract'].includes(option.id))
+        option.id = 'confirm'
+      else if (['no', 'fix', 'revise', 'correct_more', 'need_changes', 'need-changes', 'edit'].includes(option.id))
+        option.id = 'adjust'
+    }
+  }
   if (unique === 'layer_selection_method') {
     for (const option of options) {
       if (option.id === 'draw' || option.id === 'draw_box' || option.id === 'boxes' || option.id === 'draw-boxes')
@@ -625,9 +647,10 @@ function parseAskQuestion(raw: unknown, index: number, seen: Set<string>): Choic
   const title = clipAsk(row.title, 80)
   const recommendedRaw = clipAsk(row.recommended ?? row.recommended_id ?? row.recommendedId, 64)
   const recommendedId = options.some(item => item.id === recommendedRaw) ? recommendedRaw : undefined
+  const displayPrompt = unique === 'layer_split_confirm' ? formatLayerSplitConfirmPrompt(prompt) : prompt
   return {
     id: unique,
-    prompt,
+    prompt: displayPrompt,
     options: SKETCH_QUESTIONS.includes(id)
       ? options.filter(option => (id === 'sketch_prompt' ? ['send', 'adjust', 'cancel'] : id === 'sketch_understanding' ? ['correct', 'adjust'] : ['yes', 'no']).includes(option.id)).map(option => ({ ...option, custom: option.id === 'adjust' }))
       : withCustomChoiceOption(options),

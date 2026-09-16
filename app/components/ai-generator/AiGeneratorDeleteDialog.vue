@@ -22,10 +22,12 @@ function onOpenChange(open: boolean) {
     <AlertDialogContent class="rounded-2xl border-border bg-card shadow-none sm:max-w-md">
       <AlertDialogHeader class="gap-2">
         <AlertDialogTitle>
-          {{ count && count > 1 ? `Delete ${count} results?` : 'Delete this result?' }}
+          {{ count && count > 1 ? `Delete ${count} assets?` : 'Delete asset' }}
         </AlertDialogTitle>
         <AlertDialogDescription>
-          This cannot be undone. The result will be removed from your library and cannot be recovered.
+          {{ count && count > 1
+            ? 'This cannot be undone. These assets will be removed from this project and cannot be recovered.'
+            : 'This cannot be undone. The asset will be removed from this project and cannot be recovered.' }}
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>

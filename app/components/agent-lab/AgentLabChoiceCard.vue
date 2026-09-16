@@ -10,12 +10,14 @@ const props = withDefaults(defineProps<{
   answers?: ChoiceAnswer[]
   readOnly?: boolean
   pending?: boolean
+  hideLayerEditor?: boolean
   referenceImages?: ImageAnnotationReference[]
   uploadImage?: (file: File) => Promise<ImageAnnotationReference>
   sourceImages?: { id: string, url: string }[]
 }>(), {
   pending: false,
   readOnly: false,
+  hideLayerEditor: false,
 })
 
 const emit = defineEmits<{
@@ -76,7 +78,8 @@ const annotationPoints = computed({
 const uploading = ref(false)
 const annotating = computed(() => selections.value.image_edit_method?.optionId === 'annotate')
 const selecting = ref(false)
-const drawing = computed(() => selections.value.layer_selection_method?.optionId === 'draw_boxes')
+const confirmingLayers = computed(() => questions.value.some(question => question.id === 'layer_split_confirm' || question.id === 'layer_split_plan'))
+const drawing = computed(() => !confirmingLayers.value && selections.value.layer_selection_method?.optionId === 'draw_boxes')
 watch(() => props.sourceImages, (images) => {
   if (!images?.some(image => image.url === sourceUrl.value))
     sourceUrl.value = images?.[0]?.url || ''
@@ -394,7 +397,7 @@ const resolvedAnswers = computed(() => {
             Upload a source image in the chat first.
           </p>
         </section>
-        <section v-if="drawing" class="flex min-w-0 flex-col gap-3" aria-label="Select image layers">
+        <section v-if="drawing && !hideLayerEditor" class="flex min-w-0 flex-col gap-3" aria-label="Select image layers">
           <p class="text-sm text-muted-foreground">
             Draw boxes on each image, then confirm all images together. Your boxes are saved when switching images.
           </p>

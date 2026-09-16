@@ -53,7 +53,7 @@ export async function prepareModelGeneration(tool: string, json: string, session
     return prepareModelGeneration(`model_${SKETCH_TO_IMAGE_MODEL.replaceAll('-', '_')}`, JSON.stringify({ ...raw, images: sketch.inputUrls }), session)
   }
   if (model.id === 'image-layer-splitter' && layerSplitNeedsPlan(session.messages))
-    throw new Error('Layer targets are missing. Do not invent regions or show a generation confirmation. Call ask_user with layer_selection_method (Draw boxes / Describe the layers / Other) and wait. If Describe the layers was already selected, call ask_user with layer_split_plan containing image-specific extraction proposals and Other, then wait. If Draw boxes was selected, request actual regions. A model mention followed by an upload is not a confirmed splitting plan.')
+    throw new Error('Layer targets are not confirmed yet. Do not invent regions or show a credit confirmation. Call ask_user with layer_selection_method (Draw boxes / Describe the layers / Other) when needed. After boxes or a description, inspect the image and call ask_user with layer_split_confirm (confirm / adjust / Other). Only call the splitter after Confirm. A model mention followed by an upload is not a confirmed splitting plan.')
   if (model.id === 'image-text-editor') {
     const requestedImage = String(JSON.parse(json).image_url || '')
     const sourceUrl = session.images.find(image => image.id === requestedImage)?.url || requestedImage

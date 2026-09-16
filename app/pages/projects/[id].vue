@@ -10,6 +10,7 @@ import { PROJECT_NAME_MAX } from '~~/shared/types/project'
 import { readErrorMessage } from '~~/shared/utils/apiError'
 import ProjectMoveJobDialog from '@/components/projects/ProjectMoveJobDialog.vue'
 import { canvasMediaNavigationKey } from '~/composables/useCanvasMediaNavigation'
+import AssetLibraryImportDialog from '@/components/asset-libraries/AssetLibraryImportDialog.vue'
 
 const canvas = ref<{
   focusMedia: (url: string) => Promise<boolean>
@@ -42,6 +43,56 @@ const total = ref(0)
 const loading = ref(false)
 const deletingTaskId = ref<string | null>(null)
 const deleteConfirmOpen = ref(false)
+const libraryImportOpen = ref(false)
+const libraryImportPending = ref(false)
+const pendingLibraryAssets = ref<Array<{ url: string, name: string, kind: 'image' | 'video' | 'audio' }>>([])
+const { libraries, loadLibraries, upsertLibrary } = useAssetLibraries()
+
+function requestSaveToLibrary(assets: Array<{ url: string, name: string, kind: 'image' | 'video' | 'audio' }>) {
+  const unique = []
+  const seen = new Set<string>()
+  for (const asset of assets) {
+    if (!asset.url || seen.has(asset.url))
+      continue
+    seen.add(asset.url)
+    unique.push(asset)
+  }
+  if (!unique.length)
+    return
+  pendingLibraryAssets.value = unique
+  libraryImportOpen.value = true
+  void loadLibraries()
+}
+
+async function confirmSaveToLibrary(libraryId: string) {
+  if (!libraryId || libraryImportPending.value || !pendingLibraryAssets.value.length)
+    return
+  libraryImportPending.value = true
+  try {
+    for (const asset of pendingLibraryAssets.value) {
+      await $fetch(`/api/asset-libraries/${libraryId}/assets`, {
+        method: 'POST',
+        body: {
+          url: asset.url,
+          name: asset.name,
+          kind: asset.kind,
+        },
+      })
+    }
+    const count = pendingLibraryAssets.value.length
+    toast.success(count > 1 ? `Saved ${count} assets to library` : 'Saved to asset library')
+    libraryImportOpen.value = false
+    pendingLibraryAssets.value = []
+    await loadLibraries()
+  }
+  catch (error) {
+    toast.error(readErrorMessage(error, 'Could not save to the library'))
+  }
+  finally {
+    libraryImportPending.value = false
+  }
+}
+
 const pendingDeleteTaskId = ref('')
 const moveOpen = ref(false)
 const movingTaskId = ref<string | null>(null)
@@ -217,8 +268,6 @@ function requestDelete(taskId: string) {
   deleteConfirmOpen.value = true
 }
 function requestMove(taskId: string) {
-  if (!otherProjects.value.length)
-    return
   pendingMoveTaskId.value = taskId
   moveOpen.value = true
 }
@@ -524,8 +573,10 @@ function onAttachCanvas(payload: {
             :images="allImages"
             :loading="loading"
             :deleting-task-id="deletingTaskId"
-            :show-move="otherProjects.length > 0"
+            :show-move="true"
             show-attach
+            @save-to-library="requestSaveToLibrary"
+            @save-to-library-many="requestSaveToLibrary"
             @delete="requestDelete"
             @delete-many="requestBulk('delete', $event)"
             @move-many="requestBulk('move', $event)"
@@ -551,6 +602,15 @@ function onAttachCanvas(payload: {
       :projects="otherProjects"
       @update:open="moveOpen = $event"
       @confirm="confirmMove"
+    />
+      <AssetLibraryImportDialog
+      :open="libraryImportOpen"
+      :count="pendingLibraryAssets.length"
+      :pending="libraryImportPending"
+      :libraries="libraries"
+      @update:open="libraryImportOpen = $event"
+      @confirm="confirmSaveToLibrary"
+      @created="upsertLibrary"
     />
   </div>
 </template>
