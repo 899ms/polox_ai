@@ -6,6 +6,8 @@ export const PUBLIC_AGENT_SKILLS = [
     name: 'Product Hunt gallery',
     description: 'Create consistent Product Hunt launch images from your website or product details.',
     keywords: 'product hunt gallery launch exhibition brand marketing',
+    cover: '/brand/skills/product-hunt-gallery.webp',
+    coverAlt: 'PoloX AI Product Hunt gallery skill cover — launch image set from your product site',
     placeholder: 'Enter your website URL…',
   },
   {
@@ -14,6 +16,8 @@ export const PUBLIC_AGENT_SKILLS = [
     name: 'App Store Graphics',
     description: 'Turn app screenshots into matching iPhone 17 Pro Max App Store graphics with a shared visual system.',
     keywords: 'app store graphics iphone screenshot marketing preview 应用商店',
+    cover: '/brand/skills/app-store-graphics.webp',
+    coverAlt: 'PoloX AI App Store Graphics skill cover — screenshot to front-facing iPhone App Store graphic',
     placeholder: 'Upload feature screenshots and logo, then add the app name and a short feature description…',
   },
   {
@@ -22,6 +26,8 @@ export const PUBLIC_AGENT_SKILLS = [
     name: 'Sketch to Image',
     description: 'Draw a sketch, add text, and turn your idea into a finished image.',
     keywords: 'sketch drawing image 草图 绘画',
+    cover: '/brand/skills/sketch-to-image.webp',
+    coverAlt: 'PoloX AI Sketch to Image skill cover — turn a sketch into a finished image',
   },
   {
     id: 'image-text-editor',
@@ -29,6 +35,8 @@ export const PUBLIC_AGENT_SKILLS = [
     name: 'Image Text Editor',
     description: 'Edit text in images while preserving the original fonts and image details.',
     keywords: 'image text editor typography 图片 文字 编辑',
+    cover: '/brand/skills/image-text-editor.webp',
+    coverAlt: 'PoloX AI Image Text Editor skill cover — edit text in images with original fonts',
   },
   {
     id: 'image-annotation-edit',
@@ -36,6 +44,8 @@ export const PUBLIC_AGENT_SKILLS = [
     name: 'Annotated Image Edit',
     description: 'Mark points on an image and describe each change to edit precisely.',
     keywords: 'annotate annotation image edit point pin 标注 编辑',
+    cover: '/brand/skills/image-annotation-edit.webp',
+    coverAlt: 'PoloX AI Annotated Image Edit skill cover — before and after with numbered edit markers',
   },
   {
     id: 'image-layer-splitter',
@@ -43,6 +53,8 @@ export const PUBLIC_AGENT_SKILLS = [
     name: 'Image Layer Splitter',
     description: 'Draw boxes around objects to extract them as separate transparent PNG layers.',
     keywords: 'image layer splitter transparent png 图层 拆分',
+    cover: '/brand/skills/image-layer-splitter.webp',
+    coverAlt: 'PoloX AI Image Layer Splitter skill cover — extract objects as transparent PNG layers',
   },
   {
     id: 'long-form-video',
@@ -50,6 +62,8 @@ export const PUBLIC_AGENT_SKILLS = [
     name: 'Long-form video',
     description: 'Plan a storyboard and produce a multi-shot film from stills, clips, and concat.',
     keywords: 'long-form video film storyboard short film 长视频 短片 分镜',
+    cover: '/brand/skills/long-form-video.webp',
+    coverAlt: 'PoloX AI Long-form video skill cover — multi-shot film from a storyboard',
   },
 ] as const
 

@@ -17,6 +17,11 @@
 </p>
 
 <p align="center">
+  💬微信：SaihholdZhao<br />
+  📪邮箱：<a href="mailto:saihhold.chiu@gmail.com">saihhold.chiu@gmail.com</a>
+</p>
+
+<p align="center">
   遇到无法解决的问题，请通过 <a href="https://discord.gg/FwN6s664Dh">Discord</a> 联系我。
 </p>
 
