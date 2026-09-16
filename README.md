@@ -17,6 +17,11 @@
 </p>
 
 <p align="center">
+  💬 WeChat: SaihholdZhao<br />
+  📪 Email: <a href="mailto:saihhold.chiu@gmail.com">saihhold.chiu@gmail.com</a>
+</p>
+
+<p align="center">
   If you run into a problem you cannot resolve, contact me on <a href="https://discord.gg/FwN6s664Dh">Discord</a>.
 </p>
 
