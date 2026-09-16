@@ -18,7 +18,8 @@
 
 <p align="center">
   💬微信：SaihholdZhao<br />
-  📪邮箱：<a href="mailto:saihhold.chiu@gmail.com">saihhold.chiu@gmail.com</a>
+  📪邮箱：<a href="mailto:saihhold.chiu@gmail.com">saihhold.chiu@gmail.com</a><br />
+  𝕏 X：<a href="https://x.com/saihholdzhao">@saihholdzhao</a>
 </p>
 
 <p align="center">
