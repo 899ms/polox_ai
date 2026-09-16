@@ -3,6 +3,57 @@ import { readStoredMedia } from '../utils/localMedia'
 import { uploadWavespeedFile } from '../utils/wavespeed'
 import { agentEnv } from './env'
 
+/** Strip layer-selection bbox coordinates before the LLM sees tool results. Server session keeps full regions. */
+function messagesForLlm(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map(({ historyId: _historyId, internal: _internal, ...message }) => {
+    if (message.role !== 'tool' || typeof message.content !== 'string')
+      return message
+    try {
+      const parsed = JSON.parse(message.content) as {
+        ok?: boolean
+        answers?: Array<Record<string, unknown>>
+        [key: string]: unknown
+      }
+      if (!Array.isArray(parsed.answers))
+        return message
+      let changed = false
+      const answers = parsed.answers.map((answer) => {
+        if (answer.questionId !== 'layer_selection_method' || answer.optionId !== 'draw_boxes')
+          return answer
+        const next: Record<string, unknown> = { ...answer }
+        if ('regions' in next) {
+          const regions = Array.isArray(next.regions) ? next.regions : []
+          next.boxCount = regions.length
+          delete next.regions
+          changed = true
+        }
+        if (Array.isArray(next.imageSelections)) {
+          next.imageSelections = (next.imageSelections as Array<Record<string, unknown>>).map((selection) => {
+            const row: Record<string, unknown> = {
+              imageUrl: selection.imageUrl,
+              boxCount: Array.isArray(selection.regions) ? selection.regions.length : (selection.boxCount || 0),
+            }
+            if (typeof selection.boxedImageUrl === 'string' && selection.boxedImageUrl)
+              row.boxedImageUrl = selection.boxedImageUrl
+            changed = true
+            return row
+          })
+        }
+        return next
+      })
+      if (!changed)
+        return message
+      return {
+        ...message,
+        content: JSON.stringify({ ...parsed, answers }),
+      }
+    }
+    catch {
+      return message
+    }
+  })
+}
+
 const WAVESPEED_URL = 'https://llm.wavespeed.ai/v1/chat/completions'
 
 export interface StreamDelta {
@@ -96,7 +147,7 @@ export async function completeText(options: {
       temperature: options.temperature ?? 0.2,
       stream: false,
       max_tokens: options.maxTokens ?? 32,
-      messages: await providerMessages(options.messages),
+      messages: await providerMessages(messagesForLlm(options.messages)),
     }),
   })
 
@@ -132,7 +183,7 @@ export async function streamChat(options: {
       model: agentEnv.model,
       temperature: 0.4,
       stream: true,
-      messages: await providerMessages(options.messages),
+      messages: await providerMessages(messagesForLlm(options.messages)),
       tools: options.tools,
       tool_choice: options.disableTools ? 'none' : options.requiredTool ? { type: 'function', function: { name: options.requiredTool } } : 'auto',
       parallel_tool_calls: !options.requiredTool,

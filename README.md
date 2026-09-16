@@ -43,6 +43,10 @@ PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own [WaveSpeed](https:
 
 ## Updates
 
+### September 17, 2026 — v1.3.1
+
+- **Image Layer Splitter** draw-boxes now recognizes intent by comparing the original image with a boxed annotation preview instead of raw coordinates; the confirm card shows that same preview
+
 ### September 16, 2026 — v1.3.0
 
 - Added **Asset Libraries**: keep shared images, video, and audio on your machine and reuse them across projects

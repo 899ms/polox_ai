@@ -12,6 +12,7 @@ import { concatVideoUrls } from './concat'
 import { EXPORT_ZIP_TOOL, exportSessionZip, resolveZipExport } from './exportZip'
 import { removeBackground } from './fal'
 import { renderAnnotationImage } from './imageAnnotations'
+import { renderLayerSelectionOverlay } from './layerSelectionOverlay'
 import { confirmedTextEdit, detectImageText, textEditNeedsSummary } from './imageTextEditor'
 import { hasLayerSourceImage, layerSplitNeedsPlan, layerSplitNeedsSummary, needsLayerDescriptionCard, layerSplitNeedsConfirm, confirmedLayerSelections } from './layerSplitBrief'
 import { assembleToolCalls, streamChat } from './llm'
@@ -970,6 +971,14 @@ function queueAskUser(sessionId: string, items: Array<{
   }
   const intro = items.map(item => item.args.prompt).find(Boolean) || ''
   const recommendation = items.map(item => item.args.recommendation).find(Boolean) || ''
+  const layerConfirm = questions.some(question => question.id === 'layer_split_confirm' || question.id === 'layer_split_plan')
+  const boxedPreviewImages = layerConfirm
+    ? confirmedLayerSelections(session.messages)
+        .map((selection, index) => selection.boxedImageUrl
+          ? { id: `boxed-${index}`, url: selection.boxedImageUrl }
+          : null)
+        .filter((row): row is { id: string, url: string } => Boolean(row))
+    : []
   const payload = {
     id: crypto.randomUUID(),
     prompt: intro,
@@ -977,6 +986,7 @@ function queueAskUser(sessionId: string, items: Array<{
     questions,
     ...(first.args.textEdits ? { textEdits: first.args.textEdits } : {}),
     ...(first.args.textEdit ? { textEdit: first.args.textEdit } : {}),
+    ...(boxedPreviewImages.length ? { boxedPreviewImages } : {}),
   }
   session.pendingChoice = {
     payload,
@@ -1282,7 +1292,7 @@ export async function runAgentLoop(sessionId: string, emit: Emit, signal?: Abort
               : requireLayerPlan || requireLayerConfirm
                 ? [...session.messages, { role: 'system', content: requireLayerPlan
                     ? 'The user selected Describe the layers. Inspect the supplied image. Your next response MUST call ask_user with exactly one question id layer_split_confirm. In the prompt, put a short intro, then each object/position on its own line (never one packed paragraph), then a confirmation question. Options must use ids confirm, adjust (Need to correct or add more), plus Other with allow_custom: true. Recommend confirm only if the read is clear. Use the established conversation language. Do not ask in ordinary text, do not repeat the method question, and do not call the splitter yet.'
-                    : 'The user confirmed layer selection boxes. Inspect each supplied image and the listed regions. Your next response MUST call ask_user with exactly one question id layer_split_confirm. In the prompt, put a short intro, then one line per box mapping it to the object you see by appearance and position (never one packed paragraph), then a confirmation question. Options must use ids confirm, adjust (Need to correct or add more), plus Other with allow_custom: true. Recommend confirm only if the boxes match clear subjects. Use the established conversation language. Do not call the splitter or show a generation confirmation yet.' }]
+                    : 'The user confirmed layer selection boxes. Each source has an original image and a boxed-overlay preview attached. Visually compare boxed vs original; map each visible numbered box to the object by appearance and position. Do not expect bbox coordinates in the prompt. Your next response MUST call ask_user with exactly one question id layer_split_confirm. In the prompt, put a short intro, then one line per box mapping it to the object you see (never one packed paragraph), then a confirmation question. Options must use ids confirm, adjust (Need to correct or add more), plus Other with allow_custom: true. Recommend confirm only if the boxes match clear subjects. Use the established conversation language. Do not call the splitter or show a generation confirmation yet.' }]
                 : session.messages,
           requiredTool: requireLayerPlan || requireLayerConfirm || requireSketchQuestion ? ASK_USER_TOOL : requireSketchGeneration ? 'model_sketch_to_image' : undefined,
           disableTools: missingLayerImage || summarizeImageEdit || Boolean(sketch?.cancelled),
@@ -1801,18 +1811,76 @@ export async function handleChoice(sessionId: string, body: ChoiceBody, emit: Em
           ? [{ imageUrl: layerMethod.imageUrl, regions: layerMethod.regions }]
           : confirmedLayerSelections(session.messages))
     if (layerImages?.length && !sessionWantsStop(session)) {
-      // Boxes are ready — inspect + confirm with the user before any paid split.
-      const regionLines = layerImages.map((selection, index) => {
-        const boxes = selection.regions.map((region, regionIndex) => `box ${regionIndex + 1}: [${region.join(', ')}]`).join('; ')
-        return `Image ${index + 1}: ${boxes}`
-      }).join('\n')
+      // Boxes are ready — attach originals + rendered overlays (no bbox coords in LLM text).
+      const content: UserContentPart[] = []
+      const imageNotes: string[] = []
+      const boxedByImageUrl = new Map<string, string>()
+      for (let index = 0; index < layerImages.length; index++) {
+        const selection = layerImages[index]!
+        const preexisting = 'boxedImageUrl' in selection && typeof (selection as { boxedImageUrl?: string }).boxedImageUrl === 'string'
+          ? (selection as { boxedImageUrl: string }).boxedImageUrl.trim()
+          : ''
+        const boxedImageUrl = preexisting
+          || await renderLayerSelectionOverlay(selection.imageUrl, selection.regions, session.id, signal)
+        boxedByImageUrl.set(selection.imageUrl, boxedImageUrl)
+        const n = index + 1
+        imageNotes.push(`Image ${n}: original and Image ${n} with boxes drawn are attached (${selection.regions.length} box${selection.regions.length === 1 ? '' : 'es'}).`)
+        content.push(
+          { type: 'text', text: `Image ${n} original:` },
+          { type: 'image_url', image_url: { url: selection.imageUrl } },
+          { type: 'text', text: `Image ${n} with boxes drawn (numbered overlays):` },
+          { type: 'image_url', image_url: { url: boxedImageUrl } },
+        )
+      }
+      // Persist the exact agent-facing overlay URLs onto the draw_boxes tool result.
+      for (const message of [...session.messages].reverse()) {
+        if (message.role !== 'tool' || typeof message.content !== 'string')
+          continue
+        try {
+          const parsed = JSON.parse(message.content) as { ok?: boolean, answers?: ChoiceAnswer[] }
+          if (parsed.ok !== true || !Array.isArray(parsed.answers))
+            continue
+          let changed = false
+          for (const answer of parsed.answers) {
+            if (answer.questionId !== 'layer_selection_method' || answer.optionId !== 'draw_boxes')
+              continue
+            const selections = answer.imageSelections?.length
+              ? answer.imageSelections
+              : (answer.imageUrl && answer.regions?.length
+                  ? [{ imageUrl: answer.imageUrl, regions: answer.regions, boxedImageUrl: answer.boxedImageUrl }]
+                  : [])
+            if (!selections.length)
+              continue
+            answer.imageSelections = selections.map((selection) => {
+              const boxedImageUrl = boxedByImageUrl.get(selection.imageUrl) || selection.boxedImageUrl
+              if (boxedImageUrl && boxedImageUrl !== selection.boxedImageUrl)
+                changed = true
+              return {
+                imageUrl: selection.imageUrl,
+                regions: selection.regions,
+                ...(boxedImageUrl ? { boxedImageUrl } : {}),
+              }
+            })
+            if (answer.imageUrl && boxedByImageUrl.has(answer.imageUrl)) {
+              answer.boxedImageUrl = boxedByImageUrl.get(answer.imageUrl)
+              changed = true
+            }
+          }
+          if (changed) {
+            message.content = JSON.stringify(parsed)
+            break
+          }
+        }
+        catch { /* Ignore non-choice tool payloads. */ }
+      }
+      content.unshift({
+        type: 'text',
+        text: `Image Layer Splitter: the user drew selection boxes. ${imageNotes.join(' ')} Visually compare boxed vs original; map each visible box to the object by appearance and position. Then call ask_user with question id layer_split_confirm. Format the prompt with each box on its own line. Do not expect bbox coordinates in this message. Do not call the splitter or show a generation confirmation yet.`,
+      })
       session.messages.push({
         role: 'user',
         internal: true,
-        content: [
-          { type: 'text', text: `Image Layer Splitter: the user confirmed these selection boxes (coordinates are [x1, y1, x2, y2] in 0–1000 image space). Inspect every attached image and map each box to the object inside it. Then call ask_user with question id layer_split_confirm. Format the prompt with each box on its own line. Do not call the splitter or show a generation confirmation yet.\n${regionLines}` },
-          ...layerImages.map(selection => ({ type: 'image_url' as const, image_url: { url: selection.imageUrl } })),
-        ],
+        content,
       })
       touch(session)
     }

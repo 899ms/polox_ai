@@ -734,6 +734,33 @@ function layerSourceImages(message: AgentChatMessage) {
   return []
 }
 
+function layerBoxedPreviewImages(message: AgentChatMessage) {
+  const index = props.messages.findIndex(item => item.id === message.id)
+  if (index < 0)
+    return [] as { id: string, url: string }[]
+  for (const item of props.messages.slice(0, index).reverse()) {
+    for (const answer of item.choiceAnswers || []) {
+      if (answer.questionId !== 'layer_selection_method' || answer.optionId !== 'draw_boxes')
+        continue
+      const selections = answer.imageSelections?.length
+        ? answer.imageSelections
+        : (answer.imageUrl && answer.regions?.length
+            ? [{ imageUrl: answer.imageUrl, regions: answer.regions, boxedImageUrl: answer.boxedImageUrl }]
+            : [])
+      const previews = selections
+        .map((selection, selectionIndex) => {
+          const url = typeof selection.boxedImageUrl === 'string' ? selection.boxedImageUrl.trim() : ''
+          return url ? { id: `boxed-${selectionIndex}-${url}`, url } : null
+        })
+        .filter((row): row is { id: string, url: string } => Boolean(row))
+      if (previews.length)
+        return previews
+    }
+  }
+  return [] as { id: string, url: string }[]
+}
+
+
 function thumbsFor(message: AgentChatMessage & {
   media?: AgentImage[]
 }) {
@@ -1017,6 +1044,7 @@ function setActiveAgent(value: unknown) {
               :state="message.choiceState"
               :answers="message.choiceAnswers"
               :source-images="layerSourceImages(message)"
+              :boxed-preview-images="message.choice?.boxedPreviewImages?.length ? message.choice.boxedPreviewImages : layerBoxedPreviewImages(message)"
               :reference-images="projectAssets.filter(asset => !asset.video && !asset.audio)"
               :upload-image="uploadAnnotationImage"
               :hide-layer-editor="layerConfirmPending"

@@ -39,7 +39,7 @@ export function needsLayerDescriptionCard(messages: ChatMessage[]) {
 }
 
 export function confirmedLayerSelections(messages: ChatMessage[]) {
-  const selections = new Map<string, { imageUrl: string, regions: number[][] }>()
+  const selections = new Map<string, { imageUrl: string, regions: number[][], boxedImageUrl?: string }>()
   for (const message of [...messages].reverse()) {
     if (message.role === 'user' && !message.internal)
       break
@@ -53,8 +53,14 @@ export function confirmedLayerSelections(messages: ChatMessage[]) {
         if (answer.questionId !== 'layer_selection_method' || answer.optionId !== 'draw_boxes' || answer.skipped)
           continue
         for (const selection of answer.imageSelections || [answer]) {
-          if (typeof selection.imageUrl === 'string' && selection.regions?.length && !selections.has(selection.imageUrl))
-            selections.set(selection.imageUrl, { imageUrl: selection.imageUrl, regions: selection.regions as number[][] })
+          if (typeof selection.imageUrl === 'string' && selection.regions?.length && !selections.has(selection.imageUrl)) {
+            const boxedImageUrl = typeof selection.boxedImageUrl === 'string' ? selection.boxedImageUrl as string : undefined
+            selections.set(selection.imageUrl, {
+              imageUrl: selection.imageUrl,
+              regions: selection.regions as number[][],
+              ...(boxedImageUrl ? { boxedImageUrl } : {}),
+            })
+          }
         }
       }
     }
