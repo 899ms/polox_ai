@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AiModelConfig } from '~~/shared/types/aiModel'
+import type { AssetLibraryAssetSearchItem } from '~~/shared/types/assetLibrary'
 import type { GenerationJobPublic } from '~~/shared/types/generation'
 import type { ImageAnnotationReference } from '~~/shared/utils/imageAnnotations'
 import type { SketchElement } from '~~/shared/utils/sketchToImage'
@@ -8,7 +9,7 @@ import { ArrowUp, ChevronDown, Paperclip, Plus, Square, X } from 'lucide-vue-nex
 import { normalizeComposerSelection } from '~~/shared/utils/agentComposerSelection'
 import { AGENT_MODELS, agentModelLogo, modelMention, readModelMentions, stripModelMentions } from '~~/shared/utils/agentModels'
 import { composerPlaceholderForSkills, findComposerCommand, PUBLIC_AGENT_SKILLS, readSkillCommands, searchAgentSkills, stripSkillCommands } from '~~/shared/utils/agentSkills'
-import { isMediaVideoUrl } from '~~/shared/utils/seedance25'
+import { isMediaAudioUrl, isMediaVideoUrl } from '~~/shared/utils/seedance25'
 import { SKETCH_TO_IMAGE_TOOL } from '~~/shared/utils/sketchToImage'
 import { agentComposerPlaceholder } from '~/utils/agentComposerPlaceholder'
 import { confirmationWorking } from '~/utils/agentConfirmationState'
@@ -125,12 +126,40 @@ const composerText = computed({
 })
 const mention = ref<ReturnType<typeof findComposerCommand>>(null)
 const skillMatches = computed(() => searchAgentSkills(mention.value?.query || '').filter(skill => !selectedSkills.value.some(selected => selected.id === skill.id)))
+type MentionAsset = { id: string, name: string, url: string, video: boolean, audio: boolean, libraryName?: string }
+const libraryAssets = ref<AssetLibraryAssetSearchItem[]>([])
+const libraryAssetsLoading = ref(false)
+const libraryAssetsError = ref('')
+const libraryAssetsLoaded = ref(false)
+
+async function loadLibraryAssets() {
+  if (!import.meta.client || libraryAssetsLoading.value || libraryAssetsLoaded.value)
+    return
+  libraryAssetsLoading.value = true
+  libraryAssetsError.value = ''
+  try {
+    const response = await $fetch<{ items: AssetLibraryAssetSearchItem[] }>('/api/asset-libraries/assets', {
+      query: { limit: 200 },
+    })
+    libraryAssets.value = response.items || []
+    libraryAssetsLoaded.value = true
+  }
+  catch (error) {
+    libraryAssetsError.value = readErrorMessage(error, 'Could not load library assets')
+  }
+  finally {
+    libraryAssetsLoading.value = false
+  }
+}
+
 watch(() => mention.value?.trigger, (trigger) => {
-  if (trigger === '@')
+  if (trigger === '@') {
     emit('browseAssets')
+    void loadLibraryAssets()
+  }
 })
 const mentionIndex = ref(0)
-const mentionColumn = ref<'models' | 'assets' | 'skills'>('models')
+const mentionColumn = ref<'models' | 'assets' | 'libraries' | 'skills'>('models')
 const mentionStyle = ref<Record<string, string>>({})
 const modelListId = `model-list-${useId()}`
 let composerElement: HTMLTextAreaElement | null = null
@@ -145,29 +174,62 @@ const modelMatches = computed(() => {
       : terms.every(term => `${model.name} ${model.task} ${model.id}`.toLowerCase().includes(term))))
 })
 const projectAssets = computed(() => {
-  const result = new Map<string, {
-    id: string
-    name: string
-    url: string
-    video: boolean
-  }>()
+  const result = new Map<string, MentionAsset>()
   for (const job of props.projectJobs) {
     for (const [index, url] of job.resultUrls.entries()) {
-      if (url)
-        result.set(url, { id: `${job.taskId}:${index}`, url, name: job.layers?.[index]?.name || String(job.input.asset_name || job.prompt || job.model).slice(0, 100), video: job.category === 'Video' || isMediaVideoUrl(url) })
+      if (!url)
+        continue
+      const audio = isMediaAudioUrl(url)
+      const video = !audio && (job.category === 'Video' || isMediaVideoUrl(url))
+      result.set(url, { id: `${job.taskId}:${index}`, url, name: job.layers?.[index]?.name || String(job.input.asset_name || job.prompt || job.model).slice(0, 100), video, audio })
     }
   }
   for (const image of [...(props.projectImages || []), ...props.images]) {
-    if (image.url && !result.has(image.url))
-      result.set(image.url, { id: image.id, url: image.url, name: image.name || image.prompt.slice(0, 100) || 'Untitled asset', video: image.kind === 'video' || isMediaVideoUrl(image.url) })
+    if (image.url && !result.has(image.url)) {
+      const audio = image.kind === 'audio' || isMediaAudioUrl(image.url)
+      const video = !audio && (image.kind === 'video' || isMediaVideoUrl(image.url))
+      result.set(image.url, { id: image.id, url: image.url, name: image.name || image.prompt.slice(0, 100) || 'Untitled asset', video, audio })
+    }
   }
   return [...result.values()]
 })
-const assetMatches = computed(() => {
-  const terms = (mention.value?.query || '').toLowerCase().trim().split(/\s+/).filter(Boolean)
+const mentionQueryTerms = computed(() => (mention.value?.query || '').toLowerCase().trim().split(/\s+/).filter(Boolean))
+const projectAssetMatches = computed(() => {
+  const terms = mentionQueryTerms.value
   return projectAssets.value.filter(asset => terms.every(term => asset.name.toLowerCase().includes(term)))
 })
-const mentionCount = computed(() => mentionColumn.value === 'skills' ? skillMatches.value.length : mentionColumn.value === 'models' ? modelMatches.value.length : assetMatches.value.length)
+const libraryAssetsForPicker = computed(() => {
+  const projectUrls = new Set(projectAssets.value.map(asset => asset.url))
+  return libraryAssets.value.filter(asset => asset.url && !projectUrls.has(asset.url))
+})
+const libraryAssetMatches = computed(() => {
+  const terms = mentionQueryTerms.value
+  return libraryAssetsForPicker.value
+    .filter((asset) => {
+      if (!terms.length)
+        return true
+      const haystack = `${asset.name} ${asset.libraryName}`.toLowerCase()
+      return terms.every(term => haystack.includes(term))
+    })
+    .map((asset): MentionAsset => ({
+      id: `lib:${asset.id}`,
+      name: asset.name,
+      url: asset.url,
+      video: asset.kind === 'video',
+      audio: asset.kind === 'audio',
+      libraryName: asset.libraryName,
+    }))
+})
+const assetMatches = projectAssetMatches
+const mentionCount = computed(() => {
+  if (mentionColumn.value === 'skills')
+    return skillMatches.value.length
+  if (mentionColumn.value === 'models')
+    return modelMatches.value.length
+  if (mentionColumn.value === 'libraries')
+    return libraryAssetMatches.value.length
+  return assetMatches.value.length
+})
 const activeMentionId = computed(() => mention.value && mentionCount.value ? `${modelListId}-${mentionColumn.value}-${mentionIndex.value}` : undefined)
 watch(mentionCount, (count) => { mentionIndex.value = Math.max(0, Math.min(mentionIndex.value, count - 1)) })
 function updateMention(event: Event) {
@@ -177,7 +239,7 @@ function updateMention(event: Event) {
   const above = bounds.top >= 220
   mentionStyle.value = {
     left: `${Math.max(8, bounds.left)}px`,
-    width: `${Math.min(Math.max(bounds.width, 640), window.innerWidth - Math.max(8, bounds.left) - 8)}px`,
+    width: `${Math.min(Math.max(bounds.width, 780), window.innerWidth - Math.max(8, bounds.left) - 8)}px`,
     maxHeight: `${Math.min(288, above ? bounds.top - 16 : window.innerHeight - bounds.bottom - 16)}px`,
     ...(above ? { bottom: `${window.innerHeight - bounds.top + 8}px` } : { top: `${bounds.bottom + 8}px` }),
   }
@@ -539,7 +601,7 @@ async function selectSkill(skill: ReturnType<typeof searchAgentSkills>[number]) 
   composerElement?.setSelectionRange(start, start)
 }
 
-async function selectAsset(asset: typeof projectAssets.value[number]) {
+async function selectAsset(asset: MentionAsset) {
   if (!mention.value || composerLocked.value)
     return
   const { start, end } = mention.value
@@ -633,6 +695,13 @@ function workingFor(message: AgentChatMessage) {
 function statusInlineFor(message: AgentChatMessage) {
   return statusInlineVisible.value && workingFor(message)
 }
+
+const layerConfirmPending = computed(() => presentedMessages.value.some(message =>
+  message.choiceState === 'pending'
+  && message.choice?.questions.some(question => question.id === 'layer_split_confirm' || question.id === 'layer_split_plan'),
+))
+
+
 function layerSourceImages(message: AgentChatMessage) {
   const index = props.messages.findIndex(item => item.id === message.id)
   if (message.choice?.questions.some(question => question.id === 'image_edit_method')) {
@@ -707,7 +776,12 @@ function onDraftKeydown(event: KeyboardEvent) {
     }
     if (mentionColumn.value !== 'skills' && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
       event.preventDefault()
-      mentionColumn.value = event.key === 'ArrowLeft' ? 'models' : 'assets'
+      const columns = ['models', 'assets', 'libraries'] as const
+      const index = columns.indexOf(mentionColumn.value as typeof columns[number])
+      const next = event.key === 'ArrowLeft'
+        ? columns[(index <= 0 ? columns.length : index) - 1]
+        : columns[(index + 1) % columns.length]
+      mentionColumn.value = next
       mentionIndex.value = 0
       return
     }
@@ -730,6 +804,12 @@ function onDraftKeydown(event: KeyboardEvent) {
       if (asset) {
         event.preventDefault()
         void selectAsset(asset)
+        return
+      }
+      const libraryAsset = mentionColumn.value === 'libraries' ? libraryAssetMatches.value[mentionIndex.value] : undefined
+      if (libraryAsset) {
+        event.preventDefault()
+        void selectAsset(libraryAsset)
         return
       }
       const model = mentionColumn.value === 'models' ? modelMatches.value[mentionIndex.value] : undefined
@@ -937,8 +1017,9 @@ function setActiveAgent(value: unknown) {
               :state="message.choiceState"
               :answers="message.choiceAnswers"
               :source-images="layerSourceImages(message)"
-              :reference-images="projectAssets.filter(asset => !asset.video)"
+              :reference-images="projectAssets.filter(asset => !asset.video && !asset.audio)"
               :upload-image="uploadAnnotationImage"
+              :hide-layer-editor="layerConfirmPending"
               @browse-assets="emit('browseAssets')"
               :pending="pending && !choiceOpen"
               @submit="emit('submitChoice', $event)"
@@ -1098,7 +1179,7 @@ function setActiveAgent(value: unknown) {
                 No matching skills
               </p>
             </div>
-            <div v-else class="grid min-h-0 flex-1 grid-cols-2 divide-x divide-border">
+            <div v-else class="grid min-h-0 flex-1 grid-cols-3 divide-x divide-border">
               <div role="group" aria-label="Models" class="min-w-0 overflow-y-auto overscroll-contain">
                 <p class="sticky top-0 z-10 bg-popover px-3 py-2 text-xs font-semibold">
                   Models
@@ -1145,6 +1226,32 @@ function setActiveAgent(value: unknown) {
                 </p>
                 <p v-else-if="!assetMatches.length" class="px-3 py-4 text-sm text-muted-foreground" role="status">
                   {{ projectAssets.length ? 'No matching assets' : 'No assets in this project yet' }}
+                </p>
+              </div>
+              <div role="group" aria-label="Asset libraries" class="min-w-0 overflow-y-auto overscroll-contain">
+                <p class="sticky top-0 z-10 bg-popover px-3 py-2 text-xs font-semibold">
+                  Asset libraries · {{ libraryAssetsForPicker.length }}
+                </p>
+                <button
+                  v-for="(asset, index) in libraryAssetMatches" :id="`${modelListId}-libraries-${index}`" :key="asset.id"
+                  type="button" role="option" :aria-selected="mentionColumn === 'libraries' && index === mentionIndex"
+                  class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-accent"
+                  :class="mentionColumn === 'libraries' && index === mentionIndex ? 'bg-accent text-accent-foreground' : ''"
+                  @click="selectAsset(asset)"
+                >
+                  <Icon v-if="asset.audio" name="lucide:music" class="size-12 shrink-0 text-muted-foreground" />
+                  <Icon v-else-if="asset.video" name="lucide:clapperboard" class="size-12 shrink-0" />
+                  <img v-else :src="asset.url" alt="" loading="lazy" class="size-12 shrink-0 rounded-md object-cover">
+                  <span class="min-w-0"><span class="block truncate text-sm font-medium" :title="asset.name">{{ asset.name }}</span><span class="block truncate text-xs text-muted-foreground">{{ asset.audio ? 'Audio' : asset.video ? 'Video' : 'Image' }} · {{ asset.libraryName }}</span></span>
+                </button>
+                <p v-if="libraryAssetsLoading" class="px-3 py-2 text-xs text-muted-foreground" role="status">
+                  Loading library assets…
+                </p>
+                <p v-else-if="libraryAssetsError" class="px-3 py-2 text-xs text-destructive" role="status">
+                  {{ libraryAssetsError }}
+                </p>
+                <p v-else-if="!libraryAssetMatches.length" class="px-3 py-4 text-sm text-muted-foreground" role="status">
+                  {{ libraryAssetsForPicker.length ? 'No matching assets' : 'No library assets yet' }}
                 </p>
               </div>
             </div>

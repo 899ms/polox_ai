@@ -39,9 +39,19 @@
 
 本项目是 [PoloX AI](https://polox.ai) 的开源版本，与 [Lovart](https://lovart.ai)、[Crepal](https://crepal.ai) 同属 AI 创作平台。PoloX 采用 **Agent 原生**的产品设计：以 Agent 对话与无限画布承载全部交互，将创作、生成与编辑融入连续的工作流程。你只需描述想法，与 Agent 沟通，并在画布上持续完善结果。
 
-PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 [WaveSpeed](https://wavespeed.ai) API Key 即可，无需注册 PoloX 账号或订阅。项目、对话、生成记录和媒体文件保存在本机；AI 推理由外部服务提供，相关输入会发送给服务商，API 使用费用由服务商收取。WaveSpeed 支持信用卡、微信和支付宝结账。
+PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 [WaveSpeed](https://wavespeed.ai) API Key 即可，无需注册 PoloX 账号或订阅。项目、资源库、对话、生成记录和媒体文件保存在本机；AI 推理由外部服务提供，相关输入会发送给服务商，API 使用费用由服务商收取。WaveSpeed 支持信用卡、微信和支付宝结账。
 
 ## 更新
+
+### 2026 年 9 月 16 日 — v1.3.0
+
+- 新增 **资源库（Asset Libraries）**：在本地整理可跨项目复用的图片 / 视频 / 音频
+- 在 Agent 输入框用 `@` 搜索并导入资源库素材（独立第三列，与项目资产并列）
+- 项目画布可将生成结果一键保存到资源库
+- 优化 **图层拆分** 流程：拆分前先由 Agent 检视画面，再确认 / 调整（Confirm / Adjust），目标逐行列出更清晰
+- 画布缩放范围放宽至约 2%–800%
+- 删除文案更明确：删除的是项目中的资产，不会从资源库移除
+- 其他小修复与体验优化
 
 ### 2026 年 9 月 16 日 — v1.2.0
 
@@ -115,7 +125,7 @@ pnpm dev
 
 打开 [http://localhost:3001](http://localhost:3001)，使用期间保持终端运行。按 `Ctrl+C` 可停止服务。
 
-首页 **Skills** 目前包含：Product Hunt gallery、App Store Graphics、草图生图、图片文字编辑、Annotated Image Edit、图层拆分、长视频生成。点击卡片，或在 Agent 输入框输入 `/` 即可选择技能。从首页启动草图会在项目中新建 Agent。Product Hunt 网站读取使用 Playwright Chromium；Linux 环境可运行 `pnpm browser:install:linux` 安装所需系统依赖。
+侧栏的 **资源库（Asset Libraries）** 可导入共享素材，并在任意项目中用 `@` 引用。首页 **Skills** 目前包含：Product Hunt gallery、App Store Graphics、草图生图、图片文字编辑、Annotated Image Edit、图层拆分、长视频生成。点击卡片，或在 Agent 输入框输入 `/` 即可选择技能。从首页启动草图会在项目中新建 Agent。Product Hunt 网站读取使用 Playwright Chromium；Linux 环境可运行 `pnpm browser:install:linux` 安装所需系统依赖。
 
 ### 安装 FFmpeg：用于视频拼接
 
@@ -200,7 +210,7 @@ Agent LLM 已锁定为 `moonshotai/kimi-k3`，界面无需再选择模型。连�
 
 ## 本地数据
 
-SQLite 数据库保存在 `.data/polox.sqlite`，媒体文件保存在 `.data/media`。请停止服务后备份整个 `.data` 目录，以保留项目和文件。API Key 也保存在本地数据库中，请妥善保管备份。
+SQLite 数据库保存在 `.data/polox.sqlite`，媒体文件保存在 `.data/media`。请停止服务后备份整个 `.data` 目录，以保留项目、资源库和文件。API Key 也保存在本地数据库中，请妥善保管备份。
 
 本版本面向本地使用，工作区接口无需身份验证，请在本机或私有网络中运行。
 

@@ -20,6 +20,11 @@ export const navMenu: NavMenu[] = [
         icon: 'i-lucide-folder',
         link: '/projects',
       },
+      {
+        title: 'Asset Libraries',
+        icon: 'i-lucide-library',
+        link: '/libraries',
+      },
     ],
   },
 ]

@@ -7,8 +7,8 @@ export const CELL_X = 320
 export const CELL_Y = 350
 export const MAX_VISIBLE = 80
 export const MAX_PLAYING_VIDEOS = 6
-export const MIN_ZOOM = 0.12
-export const MAX_ZOOM = 3
+export const MIN_ZOOM = 0.02
+export const MAX_ZOOM = 8
 
 export interface CanvasPoint { x: number, y: number }
 export type CanvasCorner = 'nw' | 'ne' | 'sw' | 'se'
