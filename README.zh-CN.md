@@ -27,13 +27,13 @@
 </p>
 
 
-<div style="overflow-x: auto; white-space: nowrap; max-width: 100%; margin: 1rem 0 1.5rem; padding-bottom: 0.5rem;">
-  <img src="docs/images/polox-readme-01-hero.jpeg" alt="PoloX AI — Agent 原生创作平台" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
-  <img src="docs/images/polox-readme-02-unified-space.jpeg" alt="PoloX AI — Agent 对话与无限画布统一工作区" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
-  <img src="docs/images/polox-readme-03-skills.jpeg" alt="PoloX AI 技能 — Product Hunt、App Store Graphics、草图生图、标注编辑等" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
-  <img src="docs/images/polox-readme-04-models.jpeg" alt="PoloX AI — 一站式图像与视频模型工作区" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
-  <img src="docs/images/polox-readme-05-utilities.jpeg" alt="PoloX AI — 图片与视频日常工具" height="280" style="display: inline-block; border-radius: 8px;" />
-</div>
+## 案例
+
+以下是一个用 Agent + 无限画布做图层拆分的案例：左侧是 Agent 对话框（全部交互在这里完成），右侧是无限画布，方便查看与整理所有资产。
+
+<p align="center">
+  <img src="docs/images/polox-readme-case-layer-split.jpeg" alt="案例 — Agent 对话框与无限画布上的图层拆分" width="100%" />
+</p>
 
 ## 简介
 

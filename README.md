@@ -27,13 +27,13 @@
 </p>
 
 
-<div style="overflow-x: auto; white-space: nowrap; max-width: 100%; margin: 1rem 0 1.5rem; padding-bottom: 0.5rem;">
-  <img src="docs/images/polox-readme-01-hero.jpeg" alt="PoloX AI — The agent-native creative platform" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
-  <img src="docs/images/polox-readme-02-unified-space.jpeg" alt="PoloX AI — One unified space for agent chat and infinite canvas" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
-  <img src="docs/images/polox-readme-03-skills.jpeg" alt="PoloX AI skills — Product Hunt, App Store Graphics, Sketch to Image, Annotated Image Edit, and more" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
-  <img src="docs/images/polox-readme-04-models.jpeg" alt="PoloX AI — Latest AI image and video models in one workspace" height="280" style="display: inline-block; margin-right: 8px; border-radius: 8px;" />
-  <img src="docs/images/polox-readme-05-utilities.jpeg" alt="PoloX AI — Everyday utilities for images and videos" height="280" style="display: inline-block; border-radius: 8px;" />
-</div>
+## Case study
+
+An Image Layer Splitter workflow powered by the agent and the infinite canvas: the agent chat on the left handles every interaction; the infinite canvas on the right makes it easy to review and organize every asset.
+
+<p align="center">
+  <img src="docs/images/polox-readme-case-layer-split.jpeg" alt="Case study — layer splitting in agent chat and on the infinite canvas" width="100%" />
+</p>
 
 ## Introduction
 
