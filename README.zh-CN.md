@@ -2,10 +2,10 @@
   <img src="public/brand/polox-logo.png" alt="PoloX AI 标志" width="140" />
 </p>
 
-<h1 align="center">PoloX AI — Multimodal AI Agent</h1>
+<h1 align="center">PoloX AI — Agent 驱动的多模态生成工作台</h1>
 
 <p align="center">
-  基于 DeepSeek Harness 构建的开源多模态 AI Agent 平台。
+  生成、编辑与修改，无需手动操作生成器；用聊天搞定一切，结果呈现在无限画布上。
 </p>
 
 <p align="center">

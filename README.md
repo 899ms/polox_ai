@@ -2,10 +2,10 @@
   <img src="public/brand/polox-logo.png" alt="PoloX AI logo" width="140" />
 </p>
 
-<h1 align="center">PoloX AI — Multimodal AI Agent</h1>
+<h1 align="center">PoloX AI — Agent-Powered Multimodal Creation Workbench</h1>
 
 <p align="center">
-  An open-source multimodal AI agent platform, built on DeepSeek Harness.
+  Generate, edit, and refine without operating generators by hand — chat through everything, and see the results on an infinite canvas.
 </p>
 
 <p align="center">
