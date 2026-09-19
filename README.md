@@ -41,6 +41,8 @@
   <img src="docs/images/polox-readme-update-image-text-editor.jpeg" alt="Case study — Image Text Editor numbered regions matched to text fields" width="100%" />
 </p>
 
+<p align="center"><em>These are just two examples — more capabilities are covered below, or ask Codex to help you try them hands-on.</em></p>
+
 ## Introduction
 
 This is the open-source edition of [PoloX AI](https://polox.ai), a creative platform in the same space as [Lovart](https://lovart.ai) and [Crepal](https://crepal.ai). PoloX takes an **agent-native** approach: agent conversations and an infinite canvas bring creation, generation, and editing into one continuous workflow. Describe what you want, work with the agent, and refine the results on the canvas.

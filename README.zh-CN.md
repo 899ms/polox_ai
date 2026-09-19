@@ -41,6 +41,8 @@
   <img src="docs/images/polox-readme-update-image-text-editor.jpeg" alt="案例 — Image Text Editor 画布序号与文本框对应" width="100%" />
 </p>
 
+<p align="center"><em>以上只是部分案例。更多功能见下方说明，也可直接问 Codex，欢迎动手体验。</em></p>
+
 ## 简介
 
 本项目是 [PoloX AI](https://polox.ai) 的开源版本，与 [Lovart](https://lovart.ai)、[Crepal](https://crepal.ai) 同属 AI 创作平台。PoloX 采用 **Agent 原生**的产品设计：以 Agent 对话与无限画布承载全部交互，将创作、生成与编辑融入连续的工作流程。你只需描述想法，与 Agent 沟通，并在画布上持续完善结果。
