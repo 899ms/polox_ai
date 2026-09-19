@@ -34,6 +34,7 @@ export async function renderLayerSelectionOverlay(
   regions: ImageLayerRegion[],
   sessionId: string,
   signal?: AbortSignal,
+  options?: { color?: string },
 ) {
   const source = await fetchImageBytes(imageUrl, signal)
   const { data, info } = await sharp(source, { limitInputPixels: 64_000_000 })
@@ -41,7 +42,7 @@ export async function renderLayerSelectionOverlay(
     .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
     .png()
     .toBuffer({ resolveWithObject: true })
-  const overlay = Buffer.from(layerSelectionOverlaySvg(regions, info.width, info.height))
+  const overlay = Buffer.from(layerSelectionOverlaySvg(regions, info.width, info.height, options?.color ? { color: options.color } : undefined))
   const bytes = await sharp(data).composite([{ input: overlay }]).png().toBuffer()
   return uploadAgentImage(sessionId, { bytes, mime: 'image/png' })
 }

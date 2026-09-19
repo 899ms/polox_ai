@@ -12,9 +12,9 @@ import { concatVideoUrls } from './concat'
 import { EXPORT_ZIP_TOOL, exportSessionZip, resolveZipExport } from './exportZip'
 import { removeBackground } from './fal'
 import { renderAnnotationImage } from './imageAnnotations'
-import { renderLayerSelectionOverlay } from './layerSelectionOverlay'
 import { confirmedTextEdit, detectImageText, textEditNeedsSummary } from './imageTextEditor'
-import { hasLayerSourceImage, layerSplitNeedsPlan, layerSplitNeedsSummary, needsLayerDescriptionCard, layerSplitNeedsConfirm, confirmedLayerSelections } from './layerSplitBrief'
+import { confirmedLayerSelections, hasLayerSourceImage, isLayerSplitterModelId, isLayerSplitterRequest, layerSplitAwaitingAdjust, layerSplitNeedsConfirm, layerSplitNeedsPlan, layerSplitNeedsSummary, needsLayerDescriptionCard } from './layerSplitBrief'
+import { renderLayerSelectionOverlay } from './layerSelectionOverlay'
 import { assembleToolCalls, streamChat } from './llm'
 import { generateGptImage2, generateSeedance2, generateSeedance25, generateWan30 } from './modelGeneration'
 import { modelPreferenceFromChoice } from './modelPreference'
@@ -68,6 +68,7 @@ export function shouldServerAutoConfirm(policy: AgentConfirmPolicy, payload: Con
  * Automatic / when_needed confirmation without the browser.
  * Returns true when generation ran and the agent loop should continue.
  */
+
 async function tryServerAutoConfirm(sessionId: string, emit: Emit, signal?: AbortSignal) {
   const session = requireSession(sessionId)
   if (sessionWantsStop(session))
@@ -1106,7 +1107,7 @@ async function dispatchToolCalls(sessionId: string, toolCalls: ToolCall[], emit:
         const args = parseConcatVideoArgs(call.function.arguments)
         return { call, kind: 'concat', urls: resolveConcatVideoUrls(args, session.images) }
       }
-      if (call.function.name === ASK_USER_TOOL) {
+            if (call.function.name === ASK_USER_TOOL) {
         const args = parseAskUserArgs(call.function.arguments)
         assertSketchQuestion(session.messages, args.questions)
         if (args.questions.some(question => ['layer_selection_method', 'layer_split_plan', 'layer_split_confirm'].includes(question.id)) && !hasLayerSourceImage(session.messages, session.images))
@@ -1267,11 +1268,12 @@ export async function runAgentLoop(sessionId: string, emit: Emit, signal?: Abort
       }
       refreshSessionPrompt(session)
       const hasLayerImage = hasLayerSourceImage(session.messages, session.images)
-      const missingLayerImage = !hasLayerImage && (selectedModelIds(session).includes('image-layer-splitter') || layerSplitNeedsPlan(session.messages) || layerSplitNeedsConfirm(session.messages) || needsLayerDescriptionCard(session.messages))
+      const missingLayerImage = !hasLayerImage && (selectedModelIds(session).some(isLayerSplitterModelId) || isLayerSplitterRequest(session.messages) || layerSplitNeedsPlan(session.messages) || layerSplitNeedsConfirm(session.messages) || needsLayerDescriptionCard(session.messages))
       const sketch = sketchBrief(session.messages)
       const summarizeImageEdit = layerSplitNeedsSummary(session.messages, session.images) || textEditNeedsSummary(session) || Boolean(sketch && sketchGenerationSubmitted(session.messages, session.images))
-      const requireLayerPlan = hasLayerImage && needsLayerDescriptionCard(session.messages)
-      const requireLayerConfirm = hasLayerImage && !requireLayerPlan && layerSplitNeedsConfirm(session.messages)
+      const requireLayerAdjust = hasLayerImage && layerSplitAwaitingAdjust(session.messages)
+      const requireLayerPlan = hasLayerImage && !requireLayerAdjust && needsLayerDescriptionCard(session.messages)
+      const requireLayerConfirm = hasLayerImage && !requireLayerAdjust && !requireLayerPlan && layerSplitNeedsConfirm(session.messages)
       const requireSketchQuestion = Boolean(sketch?.inputUrls.length && !sketch.understandingDone && !sketch.cancelled)
       const requireSketchGeneration = Boolean(sketch?.understandingDone && !sketch.cancelled && !summarizeImageEdit)
       emit({ type: 'status', status: 'thinking' })
@@ -1288,13 +1290,15 @@ export async function runAgentLoop(sessionId: string, emit: Emit, signal?: Abort
           messages: summarizeImageEdit
             ? [...session.messages, { role: 'system', content: 'The requested image editing or layer splitting batch has already been submitted. Only summarize each source image’s actual result, including failures or pending jobs. Do not call tools, repeat successful edits or splits, inspect results as new source images, or retry failed images. A failed image does not authorize rerunning this batch. Wait for a new user request before any further generation.' }]
             : missingLayerImage
-              ? [...session.messages, { role: 'system', content: 'The user has not supplied a source image for Image Layer Splitter. Briefly ask them to upload the image in their conversation language, then wait. Do not show choices, describe image contents, or call any tools yet. Uploading the source image must happen before layer-selection cards.' }]
+              ? [...session.messages, { role: 'system', content: 'The user has not supplied a source image for Image Layer Splitter. Briefly ask them to upload the image in their conversation language, then wait. Do not show choices, describe image contents, or call any tools yet. Uploading the source image must happen before the layer-selection card.' }]
+              : requireLayerAdjust
+                ? [...session.messages, { role: 'system', content: 'The user chose Need to correct or add more (adjust) on layer_split_confirm. Your next response MUST call ask_user with exactly one question id layer_selection_method. Options: Draw boxes (draw_boxes) and Describe the layers (describe_layers). Recommend draw_boxes. Prompt them to redraw boxes or re-describe targets; the previous selection is not final. Include Other with allow_custom: true. Stop and wait. Do NOT show layer_split_confirm again until they submit a new selection. Do not generate.' }]
               : requireLayerPlan || requireLayerConfirm
                 ? [...session.messages, { role: 'system', content: requireLayerPlan
                     ? 'The user selected Describe the layers. Inspect the supplied image. Your next response MUST call ask_user with exactly one question id layer_split_confirm. In the prompt, put a short intro, then each object/position on its own line (never one packed paragraph), then a confirmation question. Options must use ids confirm, adjust (Need to correct or add more), plus Other with allow_custom: true. Recommend confirm only if the read is clear. Use the established conversation language. Do not ask in ordinary text, do not repeat the method question, and do not call the splitter yet.'
                     : 'The user confirmed layer selection boxes. Each source has an original image and a boxed-overlay preview attached. Visually compare boxed vs original; map each visible numbered box to the object by appearance and position. Do not expect bbox coordinates in the prompt. Your next response MUST call ask_user with exactly one question id layer_split_confirm. In the prompt, put a short intro, then one line per box mapping it to the object you see (never one packed paragraph), then a confirmation question. Options must use ids confirm, adjust (Need to correct or add more), plus Other with allow_custom: true. Recommend confirm only if the boxes match clear subjects. Use the established conversation language. Do not call the splitter or show a generation confirmation yet.' }]
                 : session.messages,
-          requiredTool: requireLayerPlan || requireLayerConfirm || requireSketchQuestion ? ASK_USER_TOOL : requireSketchGeneration ? 'model_sketch_to_image' : undefined,
+          requiredTool: requireLayerAdjust || requireLayerPlan || requireLayerConfirm || requireSketchQuestion ? ASK_USER_TOOL : requireSketchGeneration ? 'model_sketch_to_image' : undefined,
           disableTools: missingLayerImage || summarizeImageEdit || Boolean(sketch?.cancelled),
           tools: [...openAiTools.filter(tool => !((session.quality === 'custom' || selectedModelIds(session).length) && [GENERATE_IMAGE_TOOL, GENERATE_VIDEO_TOOL, REMOVE_BACKGROUND_TOOL].includes(tool.function.name))), ...registeredModelTools],
           signal: llmSignal,
@@ -1303,7 +1307,7 @@ export async function runAgentLoop(sessionId: string, emit: Emit, signal?: Abort
               return
             if (delta.content) {
               text += delta.content
-              if (!requireLayerPlan && !requireLayerConfirm && !requireSketchQuestion)
+              if (!requireLayerAdjust && !requireLayerPlan && !requireLayerConfirm && !requireSketchQuestion)
                 emit({ type: 'text', delta: delta.content })
             }
             if (delta.reasoning)
@@ -1335,8 +1339,8 @@ export async function runAgentLoop(sessionId: string, emit: Emit, signal?: Abort
         throw new Error('The sketch question could not be created. Please retry; no image generation was started.')
       if (requireSketchGeneration && !toolCalls.length)
         throw new Error('The sketch generation could not be submitted. Please retry; no image generation was started.')
-      if (requireLayerPlan && !toolCalls.length)
-        throw new Error((requireLayerConfirm ? 'The layer confirmation card' : 'The layer plan card') + ' could not be created. Please retry to choose the layers; no generation was started.')
+      if ((requireLayerPlan || requireLayerConfirm) && !toolCalls.length)
+        throw new Error('The layer confirmation card could not be created. Please retry to confirm the layers; no generation was started.')
       // Tool-call preambles are planning, while a terminal response is the answer.
       if (reasoning || (toolCalls.length && text)) {
         const thinking = [reasoning, toolCalls.length ? text : ''].filter(Boolean).join('\n\n')
@@ -1356,6 +1360,32 @@ export async function runAgentLoop(sessionId: string, emit: Emit, signal?: Abort
       }
       session.messages.push(assistantMessage)
       touch(session)
+
+      if (requireLayerAdjust) {
+        const valid = toolCalls.length === 1 && toolCalls[0]!.function.name === ASK_USER_TOOL && (() => {
+          try {
+            const args = parseAskUserArgs(toolCalls[0]!.function.arguments)
+            const question = args.questions[0]
+            if (args.questions.length !== 1 || question?.id !== 'layer_selection_method')
+              return false
+            if (args.questions.some(q => q.id === 'layer_split_confirm' || q.id === 'layer_split_plan'))
+              return false
+            const optionIds = new Set((question.options || []).map((option: { id: string }) => option.id))
+            if (!optionIds.has('draw_boxes'))
+              return false
+            return true
+          }
+          catch {
+            return false
+          }
+        })()
+        if (!valid) {
+          for (const call of toolCalls)
+            appendToolResult(sessionId, call.id, JSON.stringify({ ok: false, error: 'User chose adjust. Call ask_user with layer_selection_method (Draw boxes / Describe the layers) so they can revise. Do not show layer_split_confirm yet.' }))
+          continue
+        }
+      }
+
       if (requireLayerPlan || requireLayerConfirm) {
         const valid = toolCalls.length === 1 && toolCalls[0]!.function.name === ASK_USER_TOOL && (() => {
           try {
@@ -1811,79 +1841,82 @@ export async function handleChoice(sessionId: string, body: ChoiceBody, emit: Em
           ? [{ imageUrl: layerMethod.imageUrl, regions: layerMethod.regions }]
           : confirmedLayerSelections(session.messages))
     if (layerImages?.length && !sessionWantsStop(session)) {
-      // Boxes are ready — attach originals + rendered overlays (no bbox coords in LLM text).
-      const content: UserContentPart[] = []
-      const imageNotes: string[] = []
-      const boxedByImageUrl = new Map<string, string>()
-      for (let index = 0; index < layerImages.length; index++) {
-        const selection = layerImages[index]!
-        const preexisting = 'boxedImageUrl' in selection && typeof (selection as { boxedImageUrl?: string }).boxedImageUrl === 'string'
-          ? (selection as { boxedImageUrl: string }).boxedImageUrl.trim()
-          : ''
-        const boxedImageUrl = preexisting
-          || await renderLayerSelectionOverlay(selection.imageUrl, selection.regions, session.id, signal)
-        boxedByImageUrl.set(selection.imageUrl, boxedImageUrl)
-        const n = index + 1
-        imageNotes.push(`Image ${n}: original and Image ${n} with boxes drawn are attached (${selection.regions.length} box${selection.regions.length === 1 ? '' : 'es'}).`)
-        content.push(
-          { type: 'text', text: `Image ${n} original:` },
-          { type: 'image_url', image_url: { url: selection.imageUrl } },
-          { type: 'text', text: `Image ${n} with boxes drawn (numbered overlays):` },
-          { type: 'image_url', image_url: { url: boxedImageUrl } },
-        )
-      }
-      // Persist the exact agent-facing overlay URLs onto the draw_boxes tool result.
-      for (const message of [...session.messages].reverse()) {
-        if (message.role !== 'tool' || typeof message.content !== 'string')
-          continue
-        try {
-          const parsed = JSON.parse(message.content) as { ok?: boolean, answers?: ChoiceAnswer[] }
-          if (parsed.ok !== true || !Array.isArray(parsed.answers))
+      {
+        // Attach originals + rendered overlays, then inspect-and-confirm.
+        const content: UserContentPart[] = []
+        const imageNotes: string[] = []
+        const boxedByImageUrl = new Map<string, string>()
+        for (let index = 0; index < layerImages.length; index++) {
+          const selection = layerImages[index]!
+          const preexisting = 'boxedImageUrl' in selection && typeof (selection as { boxedImageUrl?: string }).boxedImageUrl === 'string'
+            ? (selection as { boxedImageUrl: string }).boxedImageUrl.trim()
+            : ''
+          const boxedImageUrl = preexisting
+            || await renderLayerSelectionOverlay(selection.imageUrl, selection.regions, session.id, signal)
+          boxedByImageUrl.set(selection.imageUrl, boxedImageUrl)
+          const n = index + 1
+          imageNotes.push(`Image ${n}: original and Image ${n} with boxes drawn are attached (${selection.regions.length} box${selection.regions.length === 1 ? '' : 'es'}).`)
+          content.push(
+            { type: 'text', text: `Image ${n} original:` },
+            { type: 'image_url', image_url: { url: selection.imageUrl } },
+            { type: 'text', text: `Image ${n} with boxes drawn (numbered overlays):` },
+            { type: 'image_url', image_url: { url: boxedImageUrl } },
+          )
+        }
+        // Persist the exact agent-facing overlay URLs onto the draw_boxes tool result.
+        for (const message of [...session.messages].reverse()) {
+          if (message.role !== 'tool' || typeof message.content !== 'string')
             continue
-          let changed = false
-          for (const answer of parsed.answers) {
-            if (answer.questionId !== 'layer_selection_method' || answer.optionId !== 'draw_boxes')
+          try {
+            const parsed = JSON.parse(message.content) as { ok?: boolean, answers?: ChoiceAnswer[] }
+            if (parsed.ok !== true || !Array.isArray(parsed.answers))
               continue
-            const selections = answer.imageSelections?.length
-              ? answer.imageSelections
-              : (answer.imageUrl && answer.regions?.length
-                  ? [{ imageUrl: answer.imageUrl, regions: answer.regions, boxedImageUrl: answer.boxedImageUrl }]
-                  : [])
-            if (!selections.length)
-              continue
-            answer.imageSelections = selections.map((selection) => {
-              const boxedImageUrl = boxedByImageUrl.get(selection.imageUrl) || selection.boxedImageUrl
-              if (boxedImageUrl && boxedImageUrl !== selection.boxedImageUrl)
+            let changed = false
+            for (const answer of parsed.answers) {
+              if (answer.questionId !== 'layer_selection_method' || answer.optionId !== 'draw_boxes')
+                continue
+              const selections = answer.imageSelections?.length
+                ? answer.imageSelections
+                : (answer.imageUrl && answer.regions?.length
+                    ? [{ imageUrl: answer.imageUrl, regions: answer.regions, boxedImageUrl: answer.boxedImageUrl }]
+                    : [])
+              if (!selections.length)
+                continue
+              answer.imageSelections = selections.map((selection) => {
+                const boxedImageUrl = boxedByImageUrl.get(selection.imageUrl) || selection.boxedImageUrl
+                if (boxedImageUrl && boxedImageUrl !== selection.boxedImageUrl)
+                  changed = true
+                return {
+                  imageUrl: selection.imageUrl,
+                  regions: selection.regions,
+                  ...(boxedImageUrl ? { boxedImageUrl } : {}),
+                }
+              })
+              if (answer.imageUrl && boxedByImageUrl.has(answer.imageUrl)) {
+                answer.boxedImageUrl = boxedByImageUrl.get(answer.imageUrl)
                 changed = true
-              return {
-                imageUrl: selection.imageUrl,
-                regions: selection.regions,
-                ...(boxedImageUrl ? { boxedImageUrl } : {}),
               }
-            })
-            if (answer.imageUrl && boxedByImageUrl.has(answer.imageUrl)) {
-              answer.boxedImageUrl = boxedByImageUrl.get(answer.imageUrl)
-              changed = true
+            }
+            if (changed) {
+              message.content = JSON.stringify(parsed)
+              break
             }
           }
-          if (changed) {
-            message.content = JSON.stringify(parsed)
-            break
-          }
+          catch { /* Ignore non-choice tool payloads. */ }
         }
-        catch { /* Ignore non-choice tool payloads. */ }
+        content.unshift({
+          type: 'text',
+          text: `Image Layer Splitter: the user drew selection boxes. ${imageNotes.join(' ')} Visually compare boxed vs original; map each visible box to the object by appearance and position. Then call ask_user with question id layer_split_confirm. Format the prompt with each box on its own line. Do not expect bbox coordinates in this message. Do not call the splitter or show a generation confirmation yet.`,
+        })
+        session.messages.push({
+          role: 'user',
+          internal: true,
+          content,
+        })
+        touch(session)
       }
-      content.unshift({
-        type: 'text',
-        text: `Image Layer Splitter: the user drew selection boxes. ${imageNotes.join(' ')} Visually compare boxed vs original; map each visible box to the object by appearance and position. Then call ask_user with question id layer_split_confirm. Format the prompt with each box on its own line. Do not expect bbox coordinates in this message. Do not call the splitter or show a generation confirmation yet.`,
-      })
-      session.messages.push({
-        role: 'user',
-        internal: true,
-        content,
-      })
-      touch(session)
     }
+
     if (textEdits.length && !sessionWantsStop(session)) {
       // Confirmed text edits already define the request; enqueue without another planning turn.
       const toolCalls: ToolCall[] = textEdits.map(edit => ({ id: crypto.randomUUID(), type: 'function', function: { name: 'model_image_text_editor', arguments: JSON.stringify({ image_url: edit.imageUrl }) } }))

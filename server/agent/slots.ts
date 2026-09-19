@@ -13,6 +13,7 @@ export interface SlotMeta {
   modelId?: string
   modelInput?: Record<string, unknown>
   requestModel?: string
+  holdSlot?: boolean
   kind?: string
   prompt?: string
   aspectRatio?: string

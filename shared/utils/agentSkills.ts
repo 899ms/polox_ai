@@ -56,6 +56,7 @@ export const PUBLIC_AGENT_SKILLS = [
     cover: '/brand/skills/image-layer-splitter.webp',
     coverAlt: 'PoloX AI Image Layer Splitter skill cover — extract objects as transparent PNG layers',
   },
+
   {
     id: 'long-form-video',
     icon: 'lucide:clapperboard',

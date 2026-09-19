@@ -627,21 +627,20 @@ function parseAskQuestion(raw: unknown, index: number, seen: Set<string>): Choic
   seen.add(unique)
   // Normalize Image Layer Splitter option ids: the model may emit 'draw'/'describe'
   // instead of the canonical 'draw_boxes'/'describe_layers' that the UI and loop expect.
-
-  if (unique === 'layer_split_confirm') {
-    for (const option of options) {
-      if (['yes', 'ok', 'correct', 'looks_good', 'looks-good', 'proceed', 'confirm_extract', 'confirm-extract'].includes(option.id))
-        option.id = 'confirm'
-      else if (['no', 'fix', 'revise', 'correct_more', 'need_changes', 'need-changes', 'edit'].includes(option.id))
-        option.id = 'adjust'
-    }
-  }
   if (unique === 'layer_selection_method') {
     for (const option of options) {
       if (option.id === 'draw' || option.id === 'draw_box' || option.id === 'boxes' || option.id === 'draw-boxes')
         option.id = 'draw_boxes'
       else if (option.id === 'describe' || option.id === 'description' || option.id === 'describe-layers')
         option.id = 'describe_layers'
+    }
+  }
+  if (unique === 'layer_split_confirm') {
+    for (const option of options) {
+      if (['yes', 'ok', 'correct', 'looks_good', 'looks-good', 'proceed', 'confirm_extract', 'confirm-extract'].includes(option.id))
+        option.id = 'confirm'
+      else if (['no', 'fix', 'revise', 'correct_more', 'need_changes', 'need-changes', 'edit'].includes(option.id))
+        option.id = 'adjust'
     }
   }
   const title = clipAsk(row.title, 80)

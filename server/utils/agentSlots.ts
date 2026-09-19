@@ -98,6 +98,7 @@ export async function acquireAgentSlot(input: {
   modelId?: string
   modelInput?: Record<string, unknown>
   requestModel?: string
+  holdSlot?: boolean
   kind?: string
   prompt?: string
   aspectRatio?: string
@@ -182,7 +183,7 @@ export async function acquireAgentSlot(input: {
       requestBody: { model: requestModel, input: inputPayload },
       originalRequest: {
         source: 'agent',
-        holdSlot: !registered,
+        holdSlot: input.holdSlot === true || !registered,
         imageId: callId,
         sessionId: input.sessionId,
       },

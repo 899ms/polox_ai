@@ -1,20 +1,71 @@
 <script setup lang="ts">
+import { useElementSize } from '@vueuse/core'
 import { Hand, Maximize, ZoomIn, ZoomOut } from 'lucide-vue-next'
 
-defineProps<{ src: string }>()
-const emit = defineEmits<{ load: [], error: [] }>()
+const props = withDefaults(defineProps<{
+  src: string
+  alt?: string
+  markers?: { x: number, y: number }[]
+  activeIndex?: number
+}>(), {
+  alt: 'Original image',
+  markers: () => [],
+  activeIndex: -1,
+})
+const emit = defineEmits<{ load: [], error: [], select: [index: number] }>()
 const viewport = ref<HTMLElement>()
 const image = ref<HTMLImageElement>()
 const loaded = ref(false)
 const zoom = ref(1)
 const offset = ref({ x: 0, y: 0 })
 const dragging = ref(false)
+const natural = ref({ width: 1, height: 1 })
+const { width: viewportWidth, height: viewportHeight } = useElementSize(viewport)
 let drag: { id: number, x: number, y: number, left: number, top: number } | null = null
-const imageStyle = computed(() => ({
+
+const fitted = computed(() => {
+  const maxW = Math.max(1, viewportWidth.value - 32)
+  const maxH = Math.max(1, viewportHeight.value - 32)
+  const scale = Math.min(maxW / natural.value.width, maxH / natural.value.height, 1)
+  return {
+    width: Math.max(1, natural.value.width * scale),
+    height: Math.max(1, natural.value.height * scale),
+  }
+})
+
+const stageStyle = computed(() => ({
+  width: `${fitted.value.width}px`,
+  height: `${fitted.value.height}px`,
   transform: `translate(-50%, -50%) translate(${offset.value.x}px, ${offset.value.y}px) scale(${zoom.value})`,
 }))
 
+const objectColors = [
+  '#67e8f9',
+  '#fdba74',
+  '#c4b5fd',
+  '#86efac',
+  '#f9a8d4',
+  '#fde047',
+  '#93c5fd',
+  '#fca5a5',
+  '#5eead4',
+  '#d8b4fe',
+  '#bef264',
+  '#fcd34d',
+  '#a5b4fc',
+  '#fda4af',
+  '#a7f3d0',
+  '#f0abfc',
+]
+
+function objectColor(index: number) {
+  return objectColors[index % objectColors.length]!
+}
+
 function onLoad() {
+  if (!image.value?.naturalWidth)
+    return
+  natural.value = { width: image.value.naturalWidth, height: image.value.naturalHeight }
   loaded.value = true
   emit('load')
 }
@@ -98,6 +149,12 @@ function onKeydown(event: KeyboardEvent) {
   event.stopPropagation()
 }
 
+function onMarkerPointerDown(event: PointerEvent, index: number) {
+  event.stopPropagation()
+  event.preventDefault()
+  emit('select', index)
+}
+
 onBeforeUnmount(endDrag)
 </script>
 
@@ -125,7 +182,7 @@ onBeforeUnmount(endDrag)
       tabindex="0"
       role="region"
       aria-label="Original image canvas. Scroll to zoom, drag to pan. Use plus or minus to zoom, arrow keys to pan, and 0 to fit."
-      @wheel="onWheel"
+      @wheel.prevent="onWheel"
       @pointerdown.stop="beginDrag"
       @pointermove="moveDrag"
       @pointerup="endDrag"
@@ -134,16 +191,35 @@ onBeforeUnmount(endDrag)
       @dblclick.prevent="fit"
       @keydown="onKeydown"
     >
-      <img
-        ref="image"
-        :src="src"
-        alt="Original image"
-        draggable="false"
-        class="pointer-events-none absolute top-1/2 left-1/2 max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] object-contain"
-        :style="imageStyle"
-        @load="onLoad"
-        @error="loaded = false; fit(); emit('error')"
+      <div
+        class="absolute top-1/2 left-1/2"
+        :style="stageStyle"
       >
+        <div class="relative size-full">
+          <img
+            ref="image"
+            :src="src"
+            :alt="alt"
+            draggable="false"
+            class="pointer-events-none block size-full max-w-none"
+            @load="onLoad"
+            @error="loaded = false; fit(); emit('error')"
+          >
+          <button
+            v-for="(marker, index) in markers"
+            :key="index"
+            type="button"
+            class="absolute flex size-7 -translate-x-1/2 -translate-y-1/2 touch-none items-center justify-center rounded-md border border-zinc-950 text-xs font-semibold text-zinc-950 shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            :class="activeIndex === index ? 'ring-2 ring-white/60' : 'cursor-pointer'"
+            :style="{ backgroundColor: objectColor(index), left: `clamp(14px, ${marker.x / 10}%, calc(100% - 14px))`, top: `clamp(14px, ${marker.y / 10}%, calc(100% - 14px))` }"
+            :aria-label="`Text line marker ${index + 1}`"
+            :aria-pressed="activeIndex === index"
+            @pointerdown="onMarkerPointerDown($event, index)"
+          >
+            {{ index + 1 }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>

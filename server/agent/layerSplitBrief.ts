@@ -1,5 +1,42 @@
 import type { ChatMessage } from './types'
 
+export const LAYER_SPLITTER_MODEL_IDS = ['image-layer-splitter'] as const
+
+export function isLayerSplitterModelId(id: string) {
+  return id === 'image-layer-splitter'
+}
+
+/**
+ * Formal trigger is image-layer-splitter (skill `/`, @ mention, homepage).
+ * Obsolete `/image-layer-splitter-lite` and lite model mentions still enter the same
+ * Quality / Seedream splitter flow (no value branch).
+ */
+export function textMentionsLayerSplitter(text: string) {
+  return /\(model:image-layer-splitter(?:-lite)?\)/.test(text)
+    || /(?:^|\s)\/image-layer-splitter(?:-lite)?(?=\s|$)/.test(text)
+}
+
+function stripLayerSplitterCommands(text: string) {
+  return text
+    .replace(/@\[[^\]]+\]\(model:[^\s)]+\)/g, '')
+    .replace(/(?:^|\s)\/image-layer-splitter(?:-lite)?(?=\s|$)/g, '')
+}
+
+function textOf(message: ChatMessage) {
+  return typeof message.content === 'string'
+    ? message.content
+    : Array.isArray(message.content) ? message.content.filter(part => part.type === 'text').map(part => part.text).join('\n') : ''
+}
+
+export function isLayerSplitterRequest(messages: ChatMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]!
+    if (message.role === 'user' && !message.internal && textMentionsLayerSplitter(textOf(message)))
+      return true
+  }
+  return false
+}
+
 export function hasLayerSourceImage(messages: ChatMessage[], images: { id: string, url?: string, kind?: string, status: string }[]) {
   const available = images.filter(image => image.status === 'success' && image.url && image.kind !== 'video')
   return messages.some((message) => {
@@ -7,7 +44,7 @@ export function hasLayerSourceImage(messages: ChatMessage[], images: { id: strin
       return false
     if (Array.isArray(message.content) && message.content.some(part => part.type === 'image_url' && available.some(image => image.url === part.image_url.url)))
       return true
-    const text = typeof message.content === 'string' ? message.content : Array.isArray(message.content) ? message.content.filter(part => part.type === 'text').map(part => part.text).join('\n') : ''
+    const text = textOf(message)
     return available.some(image => text.includes(image.url!))
   })
 }
@@ -73,7 +110,6 @@ export function confirmedLayerSelection(messages: ChatMessage[], imageUrl?: stri
   const selections = confirmedLayerSelections(messages)
   return (imageUrl ? selections.find(selection => selection.imageUrl === imageUrl) : selections[0]) || null
 }
-
 
 export function describeLayersSelected(messages: ChatMessage[]) {
   const calls = new Map(messages.flatMap(message => message.tool_calls || []).map(call => [call.id, call]))
@@ -173,7 +209,7 @@ function latestLayerSplitConfirmAfterSelection(messages: ChatMessage[]) {
   return null
 }
 
-/** After boxes or Describe the layers, require an inspect-and-confirm card before splitting. */
+/** After boxes or Describe the layers, require an inspect-and-confirm card before Seedream splitting. */
 export function layerSplitNeedsConfirm(messages: ChatMessage[]) {
   const hasBoxes = Boolean(confirmedLayerSelection(messages))
   const describe = describeLayersSelected(messages)
@@ -224,12 +260,9 @@ export function layerSplitNeedsPlan(messages: ChatMessage[]) {
   if (confirmedLayerSelection(messages))
     return false
   let start = -1
-  const textOf = (message: ChatMessage) => typeof message.content === 'string'
-    ? message.content
-    : Array.isArray(message.content) ? message.content.filter(part => part.type === 'text').map(part => part.text).join('\n') : ''
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index]!
-    if (message.role === 'user' && !message.internal && (textOf(message).includes('(model:image-layer-splitter)') || /(?:^|\s)\/image-layer-splitter(?=\s|$)/.test(textOf(message)))) {
+    if (message.role === 'user' && !message.internal && textMentionsLayerSplitter(textOf(message))) {
       start = index
       break
     }
@@ -239,9 +272,7 @@ export function layerSplitNeedsPlan(messages: ChatMessage[]) {
   const pendingPlans = new Set<string>()
   for (const message of messages.slice(start)) {
     if (message.role === 'user' && !message.internal) {
-      const text = textOf(message).split('\n\nAttached stills:')[0]!
-        .replace(/@\[[^\]]+\]\(model:[^\s)]+\)/g, '')
-        .replace(/(?:^|\s)\/image-layer-splitter(?=\s|$)/g, '')
+      const text = stripLayerSplitterCommands(textOf(message).split('\n\nAttached stills:')[0]!)
         .replace('Use the attached still(s).', '')
         .trim()
       if (text)
@@ -252,7 +283,8 @@ export function layerSplitNeedsPlan(messages: ChatMessage[]) {
         continue
       try {
         const args = JSON.parse(call.function.arguments)
-        if (args.questions?.some((question: { id: string }) => question.id === 'layer_split_plan'))
+        // layer_split_confirm (inspect-and-confirm) also settles targets after Describe.
+        if (args.questions?.some((question: { id: string }) => question.id === 'layer_split_plan' || question.id === 'layer_split_confirm'))
           pendingPlans.add(call.id)
       }
       catch { /* Invalid calls cannot establish a plan. */ }
@@ -260,7 +292,8 @@ export function layerSplitNeedsPlan(messages: ChatMessage[]) {
     if (message.role === 'tool' && pendingPlans.has(message.tool_call_id || '')) {
       try {
         const result = JSON.parse(textOf(message))
-        if (result.ok === true && (result.skipped === true || result.answers?.some((answer: { questionId: string, optionId?: string, text?: string }) => answer.questionId === 'layer_split_plan' && (answer.optionId || answer.text))))
+        if (result.ok === true && (result.skipped === true || result.answers?.some((answer: { questionId: string, optionId?: string, text?: string }) =>
+          (answer.questionId === 'layer_split_plan' || answer.questionId === 'layer_split_confirm') && (answer.optionId || answer.text))))
           return false
       }
       catch { /* Invalid results cannot confirm a plan. */ }

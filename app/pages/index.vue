@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FrontierModelCard } from '@/constants/aiModels'
-import { AGENT_MODELS } from '~~/shared/utils/agentModels'
+import { AGENT_MODELS, publicAgentModels } from '~~/shared/utils/agentModels'
 import { PUBLIC_AGENT_SKILLS } from '~~/shared/utils/agentSkills'
 import HomeFrontierModels from '@/components/home/FrontierModels.vue'
 import HomeRecentProjects from '@/components/home/RecentProjects.vue'
@@ -46,7 +46,7 @@ onMounted(() => {
     await agentComposer.value?.mentionTask(task)
   }, { immediate: true })
   watch(() => route.query.agentModel || route.query.model, async (modelId) => {
-    if (typeof modelId !== 'string' || !AGENT_MODELS.some(model => model.id === modelId))
+    if (typeof modelId !== 'string' || !publicAgentModels().some(model => model.id === modelId))
       return
     const { agentModel: _agentModel, model: _model, ...query } = route.query
     await navigateTo({ path: '/', query, hash: route.hash }, { replace: true })

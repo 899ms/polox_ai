@@ -1,7 +1,8 @@
 import { z } from 'zod'
 
 export const CANVAS_BATCH_SIZE = 100
-export const canvasAssetIdSchema = z.string().min(1).max(200).regex(/^[\w.:-]+$/).refine(value => value !== '__viewport__')
+// Reference assets use URL-derived IDs; slashes are valid database keys.
+export const canvasAssetIdSchema = z.string().min(1).max(200).regex(/^[\w./:-]+$/).refine(value => value !== '__viewport__')
 const coordinate = z.number().finite().min(-1e7).max(1e7)
 export const canvasRectSchema = z.object({
   hidden: z.boolean().optional(),

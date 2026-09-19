@@ -172,6 +172,7 @@ function loopHarness(responses, initial, prose = {}) {
     const loop = load('server/agent/loop.ts', {
         ...mocks,
         '../utils/agentChats': { snapshotAgentChatFromService: async () => { } },
+        './layerSelectionOverlay': { renderLayerSelectionOverlay: async (imageUrl) => `${imageUrl}?boxed=1` },
         './annotationReferences': { validateProjectImageReferences: async urls => { if (urls.some(url => !s.images.some(image => image.url === url && image.status === 'success'))) throw new Error('Reference image is not available'); } },
         './models': { ...api, runModelGeneration: async (_session, callId, args) => {
                 generationRequests.push({ callId, args });
@@ -237,9 +238,13 @@ test('multiple layer selections prepare distinct source jobs with their own conf
     const urls = [source, 'https://example.com/second.png'];
     const boxes = [[[10, 20, 500, 600]], [[100, 200, 800, 900], [0, 0, 100, 100]]];
     s.images = urls.map((url, i) => ({ id: `source-${i}`, url, status: 'success', kind: 'still' }));
+    const confirmCall = { role: 'assistant', tool_calls: [{ id: 'confirm', function: { name: 'ask_user', arguments: JSON.stringify({ questions: [{ id: 'layer_split_confirm' }] }) } }] };
+    const confirmAnswer = { role: 'tool', tool_call_id: 'confirm', content: JSON.stringify({ ok: true, answers: [{ questionId: 'layer_split_confirm', optionId: 'confirm' }] }) };
     s.messages = [
         { role: 'user', content: '@[Image Layer Splitter](model:image-layer-splitter)' },
         ...urls.map((imageUrl, i) => ({ role: 'tool', content: JSON.stringify({ ok: true, answers: [{ questionId: 'layer_selection_method', optionId: 'draw_boxes', imageUrl, regions: boxes[i] }] }) })),
+        confirmCall,
+        confirmAnswer,
     ];
     const tool = registry.agentModelToolName('image-layer-splitter');
     for (const refs of [urls, ['source-0', 'source-1']]) {
@@ -253,7 +258,12 @@ test('multiple layer selections prepare distinct source jobs with their own conf
     }
     await assert.rejects(api.prepareModelGeneration(tool, '{}', s), /source image with confirmed boxes/);
     await assert.rejects(api.prepareModelGeneration(tool, JSON.stringify({ image_url: 'https://example.com/unconfirmed.png', regions: boxes[0] }), s), /source image with confirmed boxes/);
-    s.messages.pop();
+    s.messages = [
+        { role: 'user', content: '@[Image Layer Splitter](model:image-layer-splitter)' },
+        { role: 'tool', content: JSON.stringify({ ok: true, answers: [{ questionId: 'layer_selection_method', optionId: 'draw_boxes', imageUrl: source, regions: boxes[0] }] }) },
+        confirmCall,
+        confirmAnswer,
+    ];
     const single = await api.prepareModelGeneration(tool, '{}', s);
     assert.equal(single.input.image, source);
 });
@@ -283,19 +293,32 @@ for (const confirmPolicy of ['always', 'auto']) {
             { imageUrl: source, regions: [[0, 0, 100, 100]] },
             { imageUrl: 'https://example.com/second.png', regions: [[100, 100, 500, 500], [500, 500, 900, 900]] },
         ];
-        const payload = { id: 'choice-batch', questions: [{ id: 'layer_selection_method', options: [{ id: 'draw_boxes', label: 'Draw boxes' }] }] };
-        const h = loopHarness([], {
+        const model = registry.AGENT_MODELS.find(model => model.id === 'image-layer-splitter');
+        const splitCalls = imageSelections.map((selection, i) => call(model, { image_url: selection.imageUrl, regions: selection.regions }, `split-${i}`));
+        const methodPayload = { id: 'choice-batch', questions: [{ id: 'layer_selection_method', options: [{ id: 'draw_boxes', label: 'Draw boxes' }, { id: 'describe_layers', label: 'Describe the layers' }] }] };
+        const confirmPayload = { id: 'choice-confirm', questions: [{ id: 'layer_split_confirm', options: [{ id: 'confirm', label: 'Confirm' }, { id: 'adjust', label: 'Need to correct or add more' }] }] };
+        const h = loopHarness([
+            [{ id: 'ask-confirm', type: 'function', function: { name: 'ask_user', arguments: JSON.stringify({ questions: [{ id: 'layer_split_confirm', prompt: 'Confirm boxes', options: confirmPayload.questions[0].options }] }) } }],
+            splitCalls,
+        ], {
             confirmPolicy,
             images: imageSelections.map((selection, i) => ({ id: `source-${i}`, url: selection.imageUrl, status: 'success', kind: 'still' })),
-            messages: [{ role: 'user', content: '@[Image Layer Splitter](model:image-layer-splitter)' }],
-            pendingChoice: { payload, items: [{ toolCallId: 'ask-boxes', tool: 'ask_user' }] },
+            messages: [{ role: 'user', content: [
+                { type: 'text', text: '@[Image Layer Splitter](model:image-layer-splitter)\nUse the attached still(s).' },
+                ...imageSelections.map(selection => ({ type: 'image_url', image_url: { url: selection.imageUrl } })),
+            ] }],
+            pendingChoice: { payload: methodPayload, items: [{ toolCallId: 'ask-boxes', tool: 'ask_user' }] },
         });
-        await h.choice({ action: 'submit', choiceId: payload.id, answers: [{ questionId: 'layer_selection_method', optionId: 'draw_boxes', imageSelections }] });
-        const confirmation = h.events.find(event => event.type === 'confirmation').confirmation;
+        // Mock overlay renderer so choice can continue without sharp/network.
+        await h.choice({ action: 'submit', choiceId: methodPayload.id, answers: [{ questionId: 'layer_selection_method', optionId: 'draw_boxes', imageSelections }] });
+        assert.ok(h.s.pendingChoice, 'inspect-and-confirm card is required after boxes');
+        assert.equal(h.s.pendingChoice.payload.questions[0].id, 'layer_split_confirm');
+        await h.choice({ action: 'submit', choiceId: h.s.pendingChoice.payload.id, answers: [{ questionId: 'layer_split_confirm', optionId: 'confirm' }] });
+        const confirmation = h.events.find(event => event.type === 'confirmation')?.confirmation || h.s.pendingConfirmation?.payload;
+        assert.ok(confirmation);
         assert.equal(confirmation.count, 2);
         assert.deepEqual(Array.from(confirmation.jobs, job => job.inputUrls[0]), imageSelections.map(selection => selection.imageUrl));
         if (confirmPolicy === 'always') {
-            assert.equal(h.tools(), undefined, 'No LLM call may drop a confirmed image');
             const pending = h.s.pendingConfirmation;
             assert.equal(pending.items.length, 2);
             await h.confirm({ action: 'confirm', confirmationId: pending.payload.id, params: pending.payload.params });
@@ -311,20 +334,31 @@ for (const confirmPolicy of ['always', 'auto']) {
 test('a partial layer failure cannot trigger a second split, even if the summary model calls tools', async () => {
     const model = registry.AGENT_MODELS.find(model => model.id === 'image-layer-splitter');
     const imageSelections = [source, 'https://example.com/small.png', 'https://example.com/room.png'].map(imageUrl => ({ imageUrl, regions: [[0, 0, 300, 300]] }));
-    const payload = { id: 'partial', questions: [{ id: 'layer_selection_method', options: [{ id: 'draw_boxes', label: 'Draw boxes' }] }] };
+    const payload = { id: 'partial', questions: [{ id: 'layer_selection_method', options: [{ id: 'draw_boxes', label: 'Draw boxes' }, { id: 'describe_layers', label: 'Describe' }] }] };
+    const splitCalls = imageSelections.map((selection, i) => call(model, { image_url: selection.imageUrl, regions: selection.regions }, `split-${i}`));
     const repeated = imageSelections.map((selection, i) => call(model, { image_url: selection.imageUrl, regions: selection.regions }, `unwanted-${i}`));
-    const h = loopHarness([repeated], {
+    const h = loopHarness([
+        [{ id: 'ask-confirm', type: 'function', function: { name: 'ask_user', arguments: JSON.stringify({ questions: [{ id: 'layer_split_confirm', prompt: 'Confirm', options: [{ id: 'confirm', label: 'Confirm' }, { id: 'adjust', label: 'Adjust' }] }] }) } }],
+        splitCalls,
+        repeated,
+    ], {
         confirmPolicy: 'auto',
         failLayerUrl: imageSelections[1].imageUrl,
         images: imageSelections.map((selection, i) => ({ id: `upload-${i}`, url: selection.imageUrl, status: 'success', kind: 'upload' })),
-        messages: [{ role: 'user', content: '@[Image Layer Splitter](model:image-layer-splitter)' }],
+        messages: [{ role: 'user', content: [
+            { type: 'text', text: '@[Image Layer Splitter](model:image-layer-splitter)\nUse the attached still(s).' },
+            ...imageSelections.map(selection => ({ type: 'image_url', image_url: { url: selection.imageUrl } })),
+        ] }],
         pendingChoice: { payload, items: [{ toolCallId: 'ask-partial', tool: 'ask_user' }] },
     }, { content: 'Two images succeeded; the small image failed.' });
     await h.choice({ action: 'submit', choiceId: payload.id, answers: [{ questionId: 'layer_selection_method', optionId: 'draw_boxes', imageSelections }] });
+    assert.ok(h.s.pendingChoice);
+    await h.choice({ action: 'submit', choiceId: h.s.pendingChoice.payload.id, answers: [{ questionId: 'layer_split_confirm', optionId: 'confirm' }] });
     assert.equal(h.generationRequests.length, 3);
     assert.equal(h.s.pendingConfirmation, null);
-    assert.equal(h.llmRequests.length, 1);
-    assert.equal(h.llmRequests[0].disableTools, true);
+    const summary = h.llmRequests.at(-1);
+    assert.ok(summary);
+    assert.equal(summary.disableTools, true);
     assert.ok(!h.s.messages.some(message => message.internal && JSON.stringify(message.content).includes('Retry only')));
     assert.ok(!h.s.messages.some(message => message.tool_calls?.some(tool => tool.id.startsWith('unwanted-'))));
     assert.equal(h.s.images.filter(image => image.modelId === model.id && image.status === 'success').length, 2);

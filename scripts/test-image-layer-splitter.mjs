@@ -52,14 +52,15 @@ test('output layers stay ordered', async () => {
 test('missing dimensions do not trigger a download', async () => {
     const result = await service({ fetch: async () => { throw new Error('Must not fetch image dimensions'); } }).readLayerResult({ layers: [layer(0), layer(1)] });
 });
-test('server forces highest resolution, fast processing, and empty default prompt', () => {
-    const input = service().sanitizeImageLayerInput({ image_url: ['https://example.com/input.png'], prompt: 'user override', image_size: 'auto_1K', enhance_prompt_mode: 'standard', basePixels: 1, layerCount: 2, enable_safety_checker: false, sync_mode: true });
-    assert.equal(input.image_size, 'auto_2K');
-    assert.equal(input.enhance_prompt_mode, 'fast');
-    assert.equal(input.prompt, '');
-    assert.equal(input.enable_safety_checker, true);
+test('server forces 2k resolution, fast prompt optimization, and bbox prompt from regions', () => {
+    const input = service().sanitizeImageLayerInput({ image_url: ['https://example.com/input.png'], prompt: 'user override', regions: [[10, 20, 100, 200]], image_size: 'auto_1K', enhance_prompt_mode: 'standard', basePixels: 1, layerCount: 2, enable_safety_checker: false, sync_mode: true });
+    assert.equal(input.resolution, '2k');
+    assert.equal(input.prompt_optimization_mode, 'fast');
+    assert.match(input.prompt, /<bbox>10 20 100 200<\/bbox>/);
+    assert.equal(input.image_size, undefined);
     assert.equal(input.basePixels, undefined);
     assert.equal(input.sync_mode, undefined);
+    assert.equal(input.regions, undefined);
 });
 test('selection coordinates generate the English prompt without forwarding UI fields', () => {
     const input = service().sanitizeImageLayerInput({ image_url: 'https://example.com/input.png', regions: [[100, 200, 400, 500], [500, 0, 1000, 1000]] });

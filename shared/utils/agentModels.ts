@@ -4,7 +4,7 @@ import { AI_MODELS, COMPANY_LOGOS, MODEL_COMPANIES } from '../constants/aiModels
 import { readSkillCommands } from './agentSkills'
 import { falInputSchema } from './falSchema'
 import { SKETCH_TO_IMAGE_MODEL, SKETCH_TO_IMAGE_TOOL } from './sketchToImage'
-import { wavespeedInputSchema } from './wavespeedSchema'
+import { wavespeedFormSchema, wavespeedInputSchema } from './wavespeedSchema'
 
 // One catalog for the composer, model tools, validation metadata.
 export const AGENT_MODELS: AiModelConfig[] = [...AI_MODELS, {
@@ -40,6 +40,10 @@ export const AGENT_MODELS: AiModelConfig[] = [...AI_MODELS, {
   } } } },
 }]
 
+/** Models shown in @ composer / homepage pickers. */
+export function publicAgentModels() {
+  return AGENT_MODELS
+}
 export function agentModelToolName(id: string) {
   return `model_${id.replace(/[^a-z0-9]/gi, '_')}`
 }
@@ -54,8 +58,14 @@ export function modelMention(model: AiModelConfig) {
 }
 export function readModelMentions(text: string, includeSkills = false) {
   const skills = includeSkills ? readSkillCommands(text).map(skill => skill.id) : []
-  return [...new Set([...text.matchAll(/@\[[^\]]+\]\(model:([^\s)]+)\)/g)].map(match => match[1]!).concat(skills))]
-    .filter(id => AGENT_MODELS.some(model => model.id === id))
+  // Obsolete lite slash / mention still routes into the Quality Image Layer Splitter skill flow.
+  if (includeSkills && /(?:^|\s)\/image-layer-splitter-lite(?=\s|$)/.test(text))
+    skills.push('image-layer-splitter')
+  return [...new Set(
+    [...text.matchAll(/@\[[^\]]+\]\(model:([^\s)]+)\)/g)].map(match => match[1]!).concat(skills)
+      .map(id => id === 'image-layer-splitter-lite' ? 'image-layer-splitter' : id)
+      .filter(id => AGENT_MODELS.some(model => model.id === id)),
+  )]
 }
 export function stripModelMentions(text: string) {
   return text.replace(/@\[[^\]]+\]\(model:[^\s)]+\)\s*/g, '')

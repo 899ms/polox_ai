@@ -14,6 +14,7 @@ import toolSchemas from '../constants/wavespeedToolSchemas.json'
 // Keep local catalog IDs stable for saved conversations and model selections.
 export const WAVESPEED_ENDPOINTS: Record<string, string> = {
   'image-layer-splitter': 'bytedance/seedream-v5.0-pro/layer-decomposition',
+
   'fal-ai/ideogram/remove-background': 'bria/remove-background',
   'seedream/5-pro-text-to-image': 'bytedance/seedream-v5.0-pro',
   'seedream/5-pro-image-to-image': 'bytedance/seedream-v5.0-pro/edit',
@@ -49,7 +50,7 @@ export function wavespeedEndpoint(model: string) {
 export function generationProvider(model: string): 'wavespeed' | 'fal' {
   return wavespeedEndpoint(model) ? 'wavespeed' : 'fal'
 }
-export const WAVESPEED_MEDIA_FIELDS = ['images', 'image', 'last_image', 'video', 'reference_images', 'reference_videos', 'reference_audios']
+export const WAVESPEED_MEDIA_FIELDS = ['images', 'image', 'image_urls', 'last_image', 'video', 'reference_images', 'reference_videos', 'reference_audios']
 export function wavespeedInputSchema(model: string): Record<string, any> | undefined {
   const endpoint = wavespeedEndpoint(model)
   if (!endpoint)

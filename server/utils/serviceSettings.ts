@@ -19,7 +19,7 @@ export function readServiceSettings(): ServiceSettings {
   const saved = row ? JSON.parse(String(row.body)) : {}
   const defaults = { wavespeedKey: '', llmModel: DEFAULT_MODEL, revision: '', llmOk: false, wavespeedOk: false, checkedAt: '' }
   // Legacy credentials and approvals must never be reused for a different provider.
-  return { ...defaults, ...(typeof saved.wavespeedKey === 'string' ? saved : {}), falKey: '' }
+  return { ...defaults, ...(typeof saved.wavespeedKey === 'string' ? saved : {}), falKey: '', llmModel: DEFAULT_MODEL }
 }
 export function writeServiceSettings(settings: ServiceSettings) {
   readServiceSettings()

@@ -43,6 +43,32 @@ PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own [WaveSpeed](https:
 
 ## Updates
 
+### September 19, 2026 — v1.4.0
+
+1. **Image Text Editor** improvements  
+   Detects text coordinates with the LLM and shows matching serial numbers on the canvas next to each text field.
+
+<p align="center">
+  <img src="docs/images/polox-readme-update-image-text-editor.jpeg" alt="Image Text Editor — numbered regions on canvas matched to text fields" width="100%" />
+</p>
+
+2. **Image Layer Splitter** bug fix  
+   - Choosing **Need to correct or add more** now reopens the layer-selection method instead of looping on the Confirm card
+
+3. **Agent Skills** structure  
+   - New dedicated skills: `image-layer-splitter.md`, `image-text-editor.md`  
+   - `single-generator.md` keeps only shared rules plus `follow` pointers; specialized flows live in their own files
+
+4. Other small changes  
+   - WaveSpeed media fields now include `image_urls`; tool schemas JSON expanded  
+   - Canvas asset ids: `canvasAssetIdSchema` allows `/`, fixing “Could not load canvas layout” for `ref:…` paths  
+   - Draw-boxes canvas: hover scroll-wheel zoom (anchored to the cursor)  
+   - Studio split: chat pane max width ratio `0.48` → `0.8`  
+   - Thinking: Collapse after expand  
+   - Confirm card: hide Image Layer Splitter prompt details  
+   - Removed unused leftover files  
+   - Other minor polish and bug fixes
+
 ### September 17, 2026 — v1.3.1
 
 - **Image Layer Splitter** draw-boxes now recognizes intent by comparing the original image with a boxed annotation preview instead of raw coordinates; the confirm card shows that same preview

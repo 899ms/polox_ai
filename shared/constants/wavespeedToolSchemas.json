@@ -83,5 +83,83 @@
       "enable_sync_mode",
       "enable_base64_output"
     ]
+  },
+  "pruna-ai/p-image/edit": {
+    "additionalProperties": false,
+    "properties": {
+      "aspect_ratio": {
+        "default": "match_input_image",
+        "description": "Aspect ratio of the generated image.",
+        "enum": [
+          "match_input_image",
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:3",
+          "3:4",
+          "3:2",
+          "2:3"
+        ],
+        "type": "string"
+      },
+      "enable_base64_output": {
+        "default": false,
+        "description": "If set to `true`, the prediction's `output` strings are returned as **naked base64** (no `data:<mime>;base64,` prefix). When `false` (default), outputs are returned as URLs pointing to our CDN.",
+        "disabled": true,
+        "type": "boolean"
+      },
+      "enable_sync_mode": {
+        "default": false,
+        "description": "If set to `true`, the request attempts to wait for the generated result and return outputs in the same response. If the result is not ready within the sync wait window, the API can return a timeout body while the task continues processing. This option is only available via the API and is supported only by some models.",
+        "disabled": true,
+        "type": "boolean"
+      },
+      "images": {
+        "description": "Reference image URLs. Upload 1 to 5 images.",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 5,
+        "minItems": 1,
+        "type": "array",
+        "x-ui-component": "uploaders",
+        "x-accept": "image/*"
+      },
+      "output_format": {
+        "default": "png",
+        "description": "Output image format.",
+        "enum": [
+          "png",
+          "jpeg",
+          "webp"
+        ],
+        "type": "string"
+      },
+      "prompt": {
+        "description": "Edit instruction describing the desired change.",
+        "type": "string",
+        "x-ui-component": "textarea",
+        "x-rows": 4
+      },
+      "seed": {
+        "default": -1,
+        "description": "Random seed. -1 means random.",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "prompt",
+      "images"
+    ],
+    "type": "object",
+    "x-order-properties": [
+      "prompt",
+      "images",
+      "aspect_ratio",
+      "output_format",
+      "seed",
+      "enable_sync_mode",
+      "enable_base64_output"
+    ]
   }
 }

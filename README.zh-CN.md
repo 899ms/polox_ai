@@ -43,6 +43,32 @@ PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 [WaveSpeed]
 
 ## 更新
 
+### 2026 年 9 月 19 日 — v1.4.0
+
+1. **优化 Image Text Editor**  
+   通过 LLM 检测文字坐标，并在画布上显示与文本框对应的序号。
+
+<p align="center">
+  <img src="docs/images/polox-readme-update-image-text-editor.jpeg" alt="Image Text Editor — 画布序号与文本框对应" width="100%" />
+</p>
+
+2. **修复 Image Layer Splitter bug**  
+   - 选择「Need to correct or add more」会强制重新打开选层方法，不再死循环 Confirm
+
+3. **优化 Agent Skills 结构**  
+   - 新建独立 skill：`image-layer-splitter.md`、`image-text-editor.md`  
+   - `single-generator.md` 只保留通用规则 + `follow` 指针，专属流程不再写在里面
+
+4. **其它小改**  
+   - Wavespeed media 字段补了 `image_urls`；tool schemas JSON 有扩充  
+   - 画布 id：`canvasAssetIdSchema` 允许 `/`，修复 `ref:…` 路径导致的「Could not load canvas layout」  
+   - 画框画布：支持 hover 滚轮缩放（锚点跟随鼠标）  
+   - Studio 分栏：聊天侧最大宽度比例 `0.48` → `0.8`  
+   - Thinking：展开后可 Collapse  
+   - Confirm 卡：隐藏 image-layer-splitter 的 prompt 细节  
+   - 删除了一些无用的遗留文件  
+   - 其他不重要的优化和 bug 修复
+
 ### 2026 年 9 月 17 日 — v1.3.1
 
 - 优化拆分图层画框流程：改为对比原图与标注预览图识别拆分意图，不再依赖原始坐标；确认卡展示同一张标注预览

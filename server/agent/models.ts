@@ -11,7 +11,7 @@ import { refreshGenerationJob } from '../utils/generationPipeline'
 import { toPublicJob } from '../utils/generationResults'
 import { confirmedAnnotationEdit } from './imageAnnotations'
 import { confirmedTextEdit } from './imageTextEditor'
-import { confirmedLayerSelections, layerSplitNeedsPlan } from './layerSplitBrief'
+import { confirmedLayerSelections, isLayerSplitterModelId, isLayerSplitterRequest, layerSplitBlocksGeneration, layerSplitNeedsConfirm, layerSplitNeedsPlan } from './layerSplitBrief'
 import { persistNow, upsertImage } from './session'
 import { sketchBrief } from './sketchBrief'
 import { acquireGenerationSlot } from './slots'
@@ -52,8 +52,8 @@ export async function prepareModelGeneration(tool: string, json: string, session
       throw new Error('Model parameters must be an object')
     return prepareModelGeneration(`model_${SKETCH_TO_IMAGE_MODEL.replaceAll('-', '_')}`, JSON.stringify({ ...raw, images: sketch.inputUrls }), session)
   }
-  if (model.id === 'image-layer-splitter' && layerSplitNeedsPlan(session.messages))
-    throw new Error('Layer targets are not confirmed yet. Do not invent regions or show a credit confirmation. Call ask_user with layer_selection_method (Draw boxes / Describe the layers / Other) when needed. After boxes or a description, inspect the image and call ask_user with layer_split_confirm (confirm / adjust / Other). Only call the splitter after Confirm. A model mention followed by an upload is not a confirmed splitting plan.')
+  if (isLayerSplitterModelId(model.id) && isLayerSplitterRequest(session.messages) && (layerSplitNeedsPlan(session.messages) || layerSplitNeedsConfirm(session.messages) || layerSplitBlocksGeneration(session.messages)))
+    throw new Error('Layer targets are not confirmed yet. Do not invent regions or show a generation confirmation. Call ask_user with layer_selection_method (Draw boxes / Describe the layers / Other) when needed. After boxes or a description, inspect the image and call ask_user with layer_split_confirm (confirm / adjust / Other). Only generate after Confirm. A model mention followed by an upload is not a confirmed splitting plan.')
   if (model.id === 'image-text-editor') {
     const requestedImage = String(JSON.parse(json).image_url || '')
     const sourceUrl = session.images.find(image => image.id === requestedImage)?.url || requestedImage
@@ -113,11 +113,13 @@ export async function prepareModelGeneration(tool: string, json: string, session
     const urls = Array.isArray(raw[imageField]) ? raw[imageField] : []
     raw[imageField] = [...new Set([annotation.imageUrl, annotation.annotatedImageUrl, ...annotation.points.flatMap(point => (point.references || []).map(reference => reference.url)), ...urls])]
   }
+
   const validated = validateAgentModelInput(model, raw)
   const input = sanitizeGenerateInput(model.id, validated)
+  const name = String(raw._name || model.name).slice(0, 100)
   return {
     modelId: model.id,
-    name: String(raw._name || model.name).slice(0, 100),
+    name,
     input,
     requestModel: wavespeedEndpoint(model.id) || falEndpoint(model.id, input),
 
@@ -201,12 +203,20 @@ export async function runModelGeneration(session: AgentSession, callId: string, 
       }
       if (job.state === 'success') {
         const layers = toPublicJob(job).layers
-        for (const [i, url] of job.resultUrls.entries()) {
-          const next = { ...image, name: layers?.[i]?.name || image.name, id: i ? `${callId}_${i}` : callId, status: 'success' as const, url }
+        const urls = [...job.resultUrls]
+        for (const [i, url] of urls.entries()) {
+          const next = {
+            ...image,
+            name: layers?.[i]?.name || image.name,
+            id: i ? `${callId}_${i}` : callId,
+            status: 'success' as const,
+            url,
+            kind: image.kind,
+          }
           upsertImage(session, next)
           emit({ type: 'image', image: next })
         }
-        return JSON.stringify({ ok: true, model: model.id, urls: job.resultUrls })
+        return JSON.stringify({ ok: true, model: model.id, urls })
       }
       emit({ type: 'status', status: job.state === 'queued' ? 'queued' : 'generating' })
       await new Promise(resolve => setTimeout(resolve, 2500))

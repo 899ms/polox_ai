@@ -76,6 +76,24 @@ const html = computed(() => {
               aria-label="Expand thinking"
               @click="thinkingExpanded = true"
             />
+            <div
+              v-if="thinkingExpanded"
+              class="mt-1.5 flex justify-end"
+            >
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Collapse thinking"
+                @click="thinkingExpanded = false"
+              >
+                Collapse
+                <Icon
+                  name="lucide:chevron-up"
+                  class="size-3.5"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
           </div>
         </div>
         <button

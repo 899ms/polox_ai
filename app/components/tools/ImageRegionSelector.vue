@@ -5,7 +5,8 @@ import { useElementSize } from '@vueuse/core'
 import { Hand, MapPin, Maximize, MousePointer2, Scan, SquareDashed, Trash2, Upload, ZoomIn, ZoomOut } from 'lucide-vue-next'
 import { imageLayerRegionFromPoints, transformImageLayerRegion } from '~~/shared/utils/imageLayerSplitter'
 
-const props = defineProps<{ src: string, disabled?: boolean, fixedRegions?: boolean, hideLabels?: boolean, sidebarTitle?: string, pointMode?: boolean }>()
+const props = withDefaults(defineProps<{ src: string, disabled?: boolean, fixedRegions?: boolean, hideLabels?: boolean, sidebarTitle?: string, pointMode?: boolean, maxRegions?: number }>(), { maxRegions: 16 })
+const regionCap = computed(() => Math.max(1, props.maxRegions || 16))
 const emit = defineEmits<{ selecting: [value: boolean], pick: [], load: [], error: [] }>()
 const regions = defineModel<ImageLayerRegion[]>({ default: () => [] })
 const points = defineModel<ImageAnnotationPoint[]>('points', { default: () => [] })
@@ -42,13 +43,43 @@ onMounted(() => {
     onImageLoad()
 })
 
-async function setZoom(value: number) {
+async function setZoom(value: number, anchorClient?: { x: number, y: number }) {
   cancel()
-  zoom.value = Math.min(4, Math.max(0.5, Math.round(value * 100) / 100))
-  await nextTick()
   const viewport = viewportRef.value
-  if (viewport)
-    viewport.scrollTo((viewport.scrollWidth - viewport.clientWidth) / 2, (viewport.scrollHeight - viewport.clientHeight) / 2)
+  const next = Math.min(4, Math.max(0.5, Math.round(value * 100) / 100))
+  if (!viewport || !loaded.value) {
+    zoom.value = next
+    return
+  }
+  if (next === zoom.value)
+    return
+
+  const rect = viewport.getBoundingClientRect()
+  const mx = anchorClient ? anchorClient.x - rect.left : viewport.clientWidth / 2
+  const my = anchorClient ? anchorClient.y - rect.top : viewport.clientHeight / 2
+  const contentX = viewport.scrollLeft + mx
+  const contentY = viewport.scrollTop + my
+  const oldScrollW = Math.max(1, viewport.scrollWidth)
+  const oldScrollH = Math.max(1, viewport.scrollHeight)
+
+  zoom.value = next
+  await nextTick()
+
+  const scaleX = viewport.scrollWidth / oldScrollW
+  const scaleY = viewport.scrollHeight / oldScrollH
+  viewport.scrollLeft = contentX * scaleX - mx
+  viewport.scrollTop = contentY * scaleY - my
+}
+
+function onWheel(event: WheelEvent) {
+  if (!loaded.value || props.disabled || !props.src || !viewportRef.value)
+    return
+  event.preventDefault()
+  event.stopPropagation()
+  const rect = viewportRef.value.getBoundingClientRect()
+  const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rect.height : 1
+  const delta = Math.max(-100, Math.min(100, event.deltaY * unit))
+  void setZoom(zoom.value * Math.exp(-delta * 0.002), { x: event.clientX, y: event.clientY })
 }
 
 function selectObject(index: number) {
@@ -154,7 +185,7 @@ function begin(event: PointerEvent) {
         activeIndex.value = index
         pointEditing = { index, origin: position, point: { ...annotation } }
       }
-      else if (activeTool.value === 'draw' && inside && points.value.length < 16) {
+      else if (activeTool.value === 'draw' && inside && points.value.length < regionCap.value) {
         pointStart = { ...position, clientX: event.clientX, clientY: event.clientY }
       }
       else {
@@ -180,7 +211,7 @@ function begin(event: PointerEvent) {
       emit('selecting', true)
     }
     else {
-      if (props.fixedRegions || !inside || regions.value.length >= 16)
+      if (props.fixedRegions || !inside || regions.value.length >= regionCap.value)
         return
       start = position
       draft.value = imageLayerRegionFromPoints(start, start)
@@ -287,7 +318,8 @@ onBeforeUnmount(cancel)
         class="h-[340px] overflow-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:h-[480px]"
         :class="src ? [canvasCursor, 'touch-none select-none'] : ''"
         :tabindex="src ? 0 : -1"
-        aria-label="Scrollable image canvas"
+        aria-label="Image canvas. Scroll to zoom, use pan tool or drag to move. Plus or minus buttons also zoom."
+        @wheel.prevent="onWheel"
         @pointerdown="begin"
         @pointermove="move"
         @pointerup="finish"
@@ -368,7 +400,7 @@ onBeforeUnmount(cancel)
       <aside class="flex min-w-0 flex-col border-t border-border bg-card lg:border-t-0 lg:border-l" aria-label="Selected objects">
         <div class="flex h-11 items-center justify-between border-b border-border px-3">
           <h3 class="text-sm font-medium">
-            {{ sidebarTitle || 'Objects' }} <span class="ml-1 text-xs text-muted-foreground" role="status">{{ regions.length }}{{ fixedRegions ? '' : '/16' }}</span>
+            {{ sidebarTitle || 'Objects' }} <span class="ml-1 text-xs text-muted-foreground" role="status">{{ regions.length }}{{ fixedRegions || regionCap >= 100 ? '' : `/${regionCap}` }}</span>
           </h3>
         </div>
         <div v-if="!regions.length" class="flex flex-1 flex-col items-center justify-center gap-3 px-5 py-10 text-center text-muted-foreground">

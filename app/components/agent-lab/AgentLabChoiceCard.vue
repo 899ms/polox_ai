@@ -3,7 +3,6 @@ import type { ImageAnnotationPoint, ImageAnnotationReference } from '~~/shared/u
 import type { ImageLayerRegion } from '~~/shared/utils/imageLayerSplitter'
 import type { ChoiceAnswer, ChoicePayload, ChoiceQuestion } from '~/composables/useAgentLab'
 import { standaloneImageEditQuestions, withCustomChoiceOption } from '~~/shared/utils/agentChoices'
-import { renderLayerSelectionOverlayBlob } from '~/utils/layerSelectionOverlay'
 
 const props = withDefaults(defineProps<{
   choice: ChoicePayload
@@ -14,14 +13,9 @@ const props = withDefaults(defineProps<{
   referenceImages?: ImageAnnotationReference[]
   uploadImage?: (file: File) => Promise<ImageAnnotationReference>
   sourceImages?: { id: string, url: string }[]
-  /** Exact boxed-overlay URLs shown to the agent; omit when unavailable (do not locally re-render). */
-  boxedPreviewImages?: { id: string, url: string }[]
-  /** When another confirm card is pending, hide the full box editor. */
-  hideLayerEditor?: boolean
 }>(), {
   pending: false,
   readOnly: false,
-  hideLayerEditor: false,
 })
 
 const emit = defineEmits<{
@@ -82,9 +76,7 @@ const annotationPoints = computed({
 const uploading = ref(false)
 const annotating = computed(() => selections.value.image_edit_method?.optionId === 'annotate')
 const selecting = ref(false)
-const confirmingLayers = computed(() => questions.value.some(question => question.id === 'layer_split_confirm' || question.id === 'layer_split_plan'))
-const drawing = computed(() => !confirmingLayers.value && selections.value.layer_selection_method?.optionId === 'draw_boxes')
-const confirmBoxedPreviews = computed(() => (props.boxedPreviewImages || []).map(image => image.url).filter(Boolean))
+const drawing = computed(() => selections.value.layer_selection_method?.optionId === 'draw_boxes')
 watch(() => props.sourceImages, (images) => {
   if (!images?.some(image => image.url === sourceUrl.value))
     sourceUrl.value = images?.[0]?.url || ''
@@ -119,6 +111,17 @@ watch(
       selections.value = {
         ...selections.value,
         image_edit_method: { optionId: 'annotate', text: '' },
+      }
+    }
+    // Draw-only method cards: open the region selector immediately.
+    const layerMethod = questions.value.find(question => question.id === 'layer_selection_method')
+    if (layerMethod && !selections.value.layer_selection_method && layerMethod.options.some(option => option.id === 'draw_boxes')) {
+      const nonCustom = layerMethod.options.filter(option => option.id !== 'other' && !option.custom)
+      if (layerMethod.recommendedId === 'draw_boxes' || (nonCustom.length === 1 && nonCustom[0]?.id === 'draw_boxes')) {
+        selections.value = {
+          ...selections.value,
+          layer_selection_method: { optionId: 'draw_boxes', text: '' },
+        }
       }
     }
   },
@@ -178,30 +181,9 @@ const canSubmit = computed(() => {
   })
 })
 
-async function emitSubmit() {
+function emitSubmit() {
   if (!canSubmit.value)
     return
-  let boxedSelections = imageSelections.value
-  if (drawing.value && props.uploadImage) {
-    uploading.value = true
-    try {
-      boxedSelections = []
-      for (const selection of imageSelections.value) {
-        try {
-          const blob = await renderLayerSelectionOverlayBlob(selection.imageUrl, selection.regions)
-          const uploaded = await props.uploadImage(new File([blob], 'layer-boxes.png', { type: 'image/png' }))
-          boxedSelections.push({ ...selection, boxedImageUrl: uploaded.url })
-        }
-        catch {
-          // CORS or upload failure — server will render the overlay instead.
-          boxedSelections.push(selection)
-        }
-      }
-    }
-    finally {
-      uploading.value = false
-    }
-  }
   emit('submit', questions.value.map((question) => {
     const current = selections.value[question.id]
     const option = selectedOption(question)
@@ -214,7 +196,7 @@ async function emitSubmit() {
         ? { annotationEdit: { imageUrl: sourceUrl.value, points: annotationPoints.value.map(point => ({ ...point })) } }
         : {}),
       ...(question.id === 'layer_selection_method' && current?.optionId === 'draw_boxes'
-        ? { imageSelections: boxedSelections }
+        ? { imageSelections: imageSelections.value }
         : {}),
     }
   }))
@@ -412,24 +394,6 @@ const resolvedAnswers = computed(() => {
             @keydown.enter.prevent="emitSubmit()"
           />
         </fieldset>
-        <section
-          v-if="confirmingLayers && confirmBoxedPreviews.length"
-          class="flex min-w-0 flex-col gap-2"
-          aria-label="Selection preview with boxes"
-        >
-          <p class="text-xs text-muted-foreground">
-            Selection preview
-          </p>
-          <div class="flex flex-col gap-3">
-            <img
-              v-for="(url, index) in confirmBoxedPreviews"
-              :key="`${index}-${url}`"
-              :src="url"
-              :alt="`Boxed selection preview ${index + 1}`"
-              class="max-h-80 w-full rounded-xl border border-border object-contain bg-muted/30"
-            >
-          </div>
-        </section>
         <section v-if="annotating" class="flex min-w-0 flex-col gap-3" aria-label="Annotate image edits">
           <div v-if="(sourceImages?.length || 0) > 1" class="flex flex-wrap gap-2" aria-label="Choose image to edit">
             <button v-for="image in sourceImages" :key="image.id" type="button" class="rounded-lg border p-1" :class="sourceUrl === image.url ? 'border-primary' : 'border-border'" :aria-pressed="sourceUrl === image.url" :disabled="pending || readOnly || uploading" @click="sourceUrl = image.url">
@@ -441,7 +405,7 @@ const resolvedAnswers = computed(() => {
             Upload a source image in the chat first.
           </p>
         </section>
-        <section v-if="drawing && !hideLayerEditor" class="flex min-w-0 flex-col gap-3" aria-label="Select image layers">
+        <section v-if="drawing" class="flex min-w-0 flex-col gap-3" aria-label="Select image layers">
           <p class="text-sm text-muted-foreground">
             Draw boxes on each image, then confirm all images together. Your boxes are saved when switching images.
           </p>

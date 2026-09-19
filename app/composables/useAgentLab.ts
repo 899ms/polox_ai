@@ -99,18 +99,18 @@ export interface ChoicePayload {
   prompt: string
   recommendation?: string
   questions: ChoiceQuestion[]
-  /** Exact boxed-overlay image URLs attached for the agent (layer_split_confirm). */
-  boxedPreviewImages?: { id: string, url: string }[]
 }
 export interface ChoiceAnswer {
   referenceImages?: { url: string, name: string }[]
   annotationEdit?: ImageAnnotationEdit
-  imageSelections?: { imageUrl: string, regions: number[][], boxedImageUrl?: string }[]
+  imageSelections?: {
+    imageUrl: string
+    regions: number[][]
+  }[]
   textEdits?: ImageTextEdit[]
   textLines?: ImageTextLine[]
   imageUrl?: string
   regions?: number[][]
-  boxedImageUrl?: string
   questionId: string
   optionId?: string
   label?: string

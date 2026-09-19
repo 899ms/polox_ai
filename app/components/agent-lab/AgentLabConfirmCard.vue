@@ -27,6 +27,7 @@ const emit = defineEmits<{
 
 const { open: openMedia } = useMediaLightbox()
 function showPrompt(params: ConfirmationPayload['params']) {
+  // Layer-splitter prompts are agent-authored isolation instructions; hide from Confirm UI.
   return params.modelId !== 'image-layer-splitter'
 }
 

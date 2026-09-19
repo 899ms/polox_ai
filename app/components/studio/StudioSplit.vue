@@ -9,7 +9,7 @@ const props = withDefaults(defineProps<{
 
 const DEFAULT_WIDTH = 448
 const MIN_WIDTH = 280
-const MAX_RATIO = 0.48
+const MAX_RATIO = 0.8
 const STEP = 16
 const HANDLE_SIZE = 16
 const DEFAULT_BOTTOM_RATIO = 0.7

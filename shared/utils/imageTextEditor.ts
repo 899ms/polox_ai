@@ -4,6 +4,10 @@ export interface ImageTextLine {
   original: string
   text: string
   location: string
+  /** Normalized image coordinate 0–1000 (left → right). */
+  x: number
+  /** Normalized image coordinate 0–1000 (top → bottom). */
+  y: number
 }
 
 export interface ImageTextEdit {
@@ -12,24 +16,52 @@ export interface ImageTextEdit {
   lines: ImageTextLine[]
 }
 
+function parseCoord(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : Number.NaN
+  if (!Number.isFinite(n))
+    return null
+  return n
+}
+
+function normalizeCoords(lines: Array<{ x: number, y: number }>) {
+  const max = Math.max(0, ...lines.flatMap(line => [line.x, line.y]))
+  // Models sometimes return 0–1 normalized centers instead of 0–1000.
+  const factor = max <= 1 ? 1000 : 1
+  return lines.map(line => ({
+    x: Math.round(Math.min(1000, Math.max(0, line.x * factor))),
+    y: Math.round(Math.min(1000, Math.max(0, line.y * factor))),
+  }))
+}
+
 export function validateTextLines(value: unknown): ImageTextLine[] {
   if (!Array.isArray(value) || !value.length || value.length > 100)
     throw new Error('Expected 1–100 text lines.')
-  return value.map((row) => {
+  const parsed = value.map((row) => {
+    const x = parseCoord(row?.x)
+    const y = parseCoord(row?.y)
     if (!row || typeof row.original !== 'string' || typeof row.text !== 'string' || !row.original.trim()
       || row.original.length > 2000 || row.text.length > 2000
-      || typeof row.location !== 'string' || !row.location.trim() || row.location.length > 300) {
-      throw new Error('Invalid text line or location description.')
+      || typeof row.location !== 'string' || !row.location.trim() || row.location.length > 300
+      || x === null || y === null) {
+      throw new Error('Invalid text line, location description, or coordinates.')
     }
-    return { original: row.original, text: row.text, location: row.location }
+    return { original: row.original, text: row.text, location: row.location, x, y }
   })
+  const coords = normalizeCoords(parsed)
+  return parsed.map((line, index) => ({ ...line, x: coords[index]!.x, y: coords[index]!.y }))
 }
 
 export function validateTextEditAnswer(detected: ImageTextEdit, incoming: unknown, urls: string[]): ImageTextEdit {
   if (!urls.includes(detected.imageUrl))
     throw new Error('The source image is no longer available.')
   const lines = validateTextLines(incoming)
-  if (lines.length !== detected.lines.length || lines.some((line, i) => line.original !== detected.lines[i]!.original || line.location !== detected.lines[i]!.location))
+  if (lines.length !== detected.lines.length || lines.some((line, i) => {
+    const expected = detected.lines[i]!
+    return line.original !== expected.original
+      || line.location !== expected.location
+      || line.x !== expected.x
+      || line.y !== expected.y
+  }))
     throw new Error('Text lines do not match the detection card.')
   if (!lines.some(line => line.text !== line.original))
     throw new Error('Change at least one text line before generating.')

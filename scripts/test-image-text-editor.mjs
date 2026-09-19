@@ -13,8 +13,8 @@ function loadFunction(file, name, context) {
 }
 const imageUrl = 'https://example.com/original.png';
 const lines = [
-    { original: 'Hello', text: '你好', location: 'upper left' },
-    { original: 'Keep', text: 'Keep', location: 'bottom right' },
+    { original: 'Hello', text: '你好', location: 'upper left', x: 120, y: 80 },
+    { original: 'Keep', text: 'Keep', location: 'bottom right', x: 820, y: 900 },
 ];
 const edit = { imageUrl, lines };
 test('strict validation preserves literal text, allows deletion, rejects malformed and forged edits', () => {
@@ -22,7 +22,11 @@ test('strict validation preserves literal text, allows deletion, rejects malform
     assert.equal(validateTextLines([{ ...lines[0], text: '' }])[0].text, '');
     for (const location of ['', null, 'x'.repeat(301)])
         assert.throws(() => validateTextLines([{ ...lines[0], location }]));
+    for (const bad of [{ x: -1, y: 0 }, { x: 1001, y: 0 }, { x: 1.5, y: 0 }, { x: '0', y: 0 }, { x: 0, y: null }])
+        assert.throws(() => validateTextLines([{ ...lines[0], ...bad }]));
     assert.throws(() => validateTextEditAnswer(edit, [{ ...lines[0], location: 'forged' }, lines[1]], [imageUrl]), /match/);
+    assert.throws(() => validateTextEditAnswer(edit, [{ ...lines[0], x: 999 }, lines[1]], [imageUrl]), /match/);
+    assert.throws(() => validateTextEditAnswer(edit, [{ ...lines[0], y: 1 }, lines[1]], [imageUrl]), /match/);
     assert.throws(() => validateTextEditAnswer(edit, lines, []), /source image/);
     assert.throws(() => validateTextEditAnswer(edit, [{ ...lines[0], original: 'Forged' }, lines[1]], [imageUrl]), /match/);
     assert.throws(() => validateTextEditAnswer(edit, lines.map(line => ({ ...line, text: line.original })), [imageUrl]), /Change at least/);
@@ -30,6 +34,7 @@ test('strict validation preserves literal text, allows deletion, rejects malform
     assert.match(prompt, /supplied original image/);
     assert.match(prompt, /"Hello" to "你好"/);
     assert.doesNotMatch(prompt, /"Keep"/);
+    assert.doesNotMatch(prompt, /\bx\b.*120|marker|0–1000/i);
 });
 test('HTTP choice roundtrip validates source and approximate descriptions and cancellation cannot authorize generation', () => {
     const context = vm.createContext({ validateTextEditAnswer, validateTextEditAnswers });
@@ -81,9 +86,9 @@ test('archive saves the provider image unchanged without downloading the origina
     await context.archiveJob(job);
     assert.equal(stored.length, 1);
 });
-test('LLM detection transcribes every line with approximate locations and no replacement authorization', async () => {
+test('LLM detection transcribes every line with approximate locations, coordinates, and no replacement authorization', async () => {
     let request;
-    let response = JSON.stringify([{ original: 'Hello', location: 'upper left', text: 'Unrequested edit', bbox: [1, 2, 3, 4] }, { original: 'Keep', location: 'bottom right' }]);
+    let response = JSON.stringify([{ original: 'Hello', location: 'upper left', x: 120, y: 80, text: 'Unrequested edit', bbox: [1, 2, 3, 4] }, { original: 'Keep', location: 'bottom right', x: 820, y: 900 }]);
     const context = vm.createContext({
         AbortSignal,
         falReadableUrl: async url => url,
@@ -96,16 +101,19 @@ test('LLM detection transcribes every line with approximate locations and no rep
     const session = { images: [{ url: imageUrl, kind: 'upload', status: 'success' }] };
     const card = await context.detectImageText('{}', session);
     assert.equal(request.messages[1].content[0].image_url.url, imageUrl);
+    assert.match(request.messages[0].content, /x: integer/);
     assert.equal(card.textEdit.lines.length, 2);
     assert.equal(card.textEdit.lines[0].text, 'Hello');
     assert.equal(card.textEdit.lines[0].location, 'upper left');
+    assert.equal(card.textEdit.lines[0].x, 120);
+    assert.equal(card.textEdit.lines[0].y, 80);
     assert.equal(card.textEdit.lines[0].bbox, undefined);
     response = '[]';
     await assert.rejects(context.detectImageText('{}', session), /No readable text/);
     await assert.rejects(context.detectImageText('{}', { images: [] }), /Upload a source image/);
 });
 test('batch choice roundtrip binds each draft to its own detected source and rejects duplicate or forged images', () => {
-    const second = { imageUrl: 'https://example.com/second.png', lines: [{ original: 'CAFE', text: '茶馆', location: 'center' }] };
+    const second = { imageUrl: 'https://example.com/second.png', lines: [{ original: 'CAFE', text: '茶馆', location: 'center', x: 500, y: 500 }] };
     const broken = { imageUrl: 'https://example.com/broken.png', lines: [], detectionError: 'No text' };
     const detected = [edit, second, broken];
     const urls = detected.map(item => item.imageUrl);
@@ -130,7 +138,7 @@ test('multi-image detection covers current attachments once in upload order and 
         completeText: async (options) => {
             const url = options.messages[1].content[0].image_url.url;
             requests.push(url);
-            return url === urls[1] ? '[]' : JSON.stringify([{ original: url === imageUrl ? 'CAFE' : 'Hello', location: 'center' }]);
+            return url === urls[1] ? '[]' : JSON.stringify([{ original: url === imageUrl ? 'CAFE' : 'Hello', location: 'center', x: 500, y: 400 }]);
         },
     });
     loadFunction('../server/agent/imageTextEditor.ts', 'detectTextSource', context);
@@ -144,6 +152,7 @@ test('multi-image detection covers current attachments once in upload order and 
     assert.deepEqual(requests, urls);
     assert.deepEqual(Array.from(card.textEdits, item => item.imageUrl), urls);
     assert.equal(card.textEdits[0].lines[0].original, 'Hello');
+    assert.equal(card.textEdits[0].lines[0].x, 500);
     assert.match(card.textEdits[1].detectionError, /No readable text/);
     assert.equal(card.textEdits[2].lines[0].original, 'CAFE');
 });
