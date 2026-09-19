@@ -29,10 +29,16 @@
 
 ## Case study
 
-An Image Layer Splitter workflow powered by the agent and the infinite canvas: the agent chat on the left handles every interaction; the infinite canvas on the right makes it easy to review and organize every asset.
+**Image Layer Splitter** — agent chat on the left handles every interaction; the infinite canvas on the right makes it easy to review and organize every asset.
 
 <p align="center">
   <img src="docs/images/polox-readme-case-layer-split.jpeg" alt="Case study — layer splitting in agent chat and on the infinite canvas" width="100%" />
+</p>
+
+**Image Text Editor** — the LLM detects text coordinates and shows matching serial numbers on the canvas next to each editable text field.
+
+<p align="center">
+  <img src="docs/images/polox-readme-update-image-text-editor.jpeg" alt="Case study — Image Text Editor numbered regions matched to text fields" width="100%" />
 </p>
 
 ## Introduction

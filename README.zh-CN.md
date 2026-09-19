@@ -29,10 +29,16 @@
 
 ## 案例
 
-以下是一个用 Agent + 无限画布做图层拆分的案例：左侧是 Agent 对话框（全部交互在这里完成），右侧是无限画布，方便查看与整理所有资产。
+**图层拆分（Image Layer Splitter）** — 左侧是 Agent 对话框（全部交互在这里完成），右侧是无限画布，方便查看与整理所有资产。
 
 <p align="center">
   <img src="docs/images/polox-readme-case-layer-split.jpeg" alt="案例 — Agent 对话框与无限画布上的图层拆分" width="100%" />
+</p>
+
+**图片文字编辑（Image Text Editor）** — 通过 LLM 检测文字坐标，并在画布上显示与文本框对应的序号。
+
+<p align="center">
+  <img src="docs/images/polox-readme-update-image-text-editor.jpeg" alt="案例 — Image Text Editor 画布序号与文本框对应" width="100%" />
 </p>
 
 ## 简介
