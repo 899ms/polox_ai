@@ -10,6 +10,7 @@ const sources = props.edits || (props.edit ? [props.edit] : [])
 const drafts = ref(sources.map(edit => ({ ...edit, lines: edit.lines.map(line => ({ ...line })) })))
 const activeIndex = ref(0)
 const activeLineIndex = ref(-1)
+const canvas = ref<{ focusMarker: (index: number, zoomTo?: number) => void } | null>(null)
 const activeEdit = computed(() => drafts.value[activeIndex.value])
 const componentId = useId()
 const failedImages = reactive<Record<string, boolean>>({})
@@ -126,6 +127,7 @@ watch(activeIndex, () => { activeLineIndex.value = -1 })
 
 function focusLine(index: number) {
   activeLineIndex.value = index
+  canvas.value?.focusMarker(index)
   nextTick(() => {
     const el = document.getElementById(`text-line-${componentId}-${activeIndex.value}-${index}`) as HTMLTextAreaElement | null
     el?.focus()
@@ -149,7 +151,12 @@ function submit() {
       </CardTitle>
       <CardDescription>{{ saved ? (state === 'skipped' ? 'Cancelled' : 'Edits saved') : 'Edit the text you want to change. Leave other lines unchanged.' }}</CardDescription>
     </CardHeader>
-    <CardContent class="grid min-w-0 gap-4 px-4">
+    <CardContent v-if="saved" class="grid min-w-0 gap-2 px-4">
+      <p class="text-sm text-muted-foreground">
+        {{ state === 'skipped' ? 'Cancelled — no edits were submitted.' : `Saved ${changed} changed ${changed === 1 ? 'line' : 'lines'}${drafts.length > 1 ? ` across ${changedEdits.length} ${changedEdits.length === 1 ? 'image' : 'images'}` : ''}.` }}
+      </p>
+    </CardContent>
+    <CardContent v-else class="grid min-w-0 gap-4 px-4">
       <div v-if="drafts.length > 1" class="flex flex-wrap gap-2" aria-label="Source image">
         <button v-for="(draft, index) in drafts" :key="draft.imageUrl" type="button" class="rounded-lg border p-1" :class="activeIndex === index ? 'border-primary' : 'border-border'" :aria-pressed="activeIndex === index" :aria-label="`Image ${index + 1}`" :disabled="pending" @click="activeIndex = index">
           <img :src="draft.imageUrl" :alt="`Image ${index + 1}`" class="size-16 object-contain">
@@ -167,6 +174,7 @@ function submit() {
           :style="{ '--text-editor-left': `${leftRatio * 100}%` }"
         >
           <ToolsImageTextCanvas
+            ref="canvas"
             :key="activeEdit.imageUrl"
             :src="activeEdit.imageUrl"
             :markers="activeEdit.detectionError ? [] : activeMarkers"

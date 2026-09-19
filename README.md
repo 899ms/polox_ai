@@ -51,6 +51,14 @@ PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own [WaveSpeed](https:
 
 ## Updates
 
+### September 19, 2026 — v1.5.0
+
+1. Added skills to the **image asset toolbar** on the canvas (Edit text, Mark edit, Split layers, Remove BG).
+
+<p align="center">
+  <img src="docs/images/polox-readme-update-image-toolbar-skills.jpeg" alt="Image asset toolbar skills — Edit text, Mark edit, Split layers, Remove BG" width="100%" />
+</p>
+
 ### September 19, 2026 — v1.4.0
 
 1. **Image Text Editor** improvements  

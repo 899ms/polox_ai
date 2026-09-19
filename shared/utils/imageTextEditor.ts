@@ -25,8 +25,8 @@ function parseCoord(value: unknown): number | null {
 
 function normalizeCoords(lines: Array<{ x: number, y: number }>) {
   const max = Math.max(0, ...lines.flatMap(line => [line.x, line.y]))
-  // Models sometimes return 0–1 normalized centers instead of 0–1000.
-  const factor = max <= 1 ? 1000 : 1
+  // Models sometimes return 0–1 or 0–100 normalized centers instead of 0–1000.
+  const factor = max <= 1 ? 1000 : max <= 100 ? 10 : 1
   return lines.map(line => ({
     x: Math.round(Math.min(1000, Math.max(0, line.x * factor))),
     y: Math.round(Math.min(1000, Math.max(0, line.y * factor))),

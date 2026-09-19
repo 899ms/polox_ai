@@ -11,11 +11,14 @@ import { readErrorMessage } from '~~/shared/utils/apiError'
 import ProjectMoveJobDialog from '@/components/projects/ProjectMoveJobDialog.vue'
 import { canvasMediaNavigationKey } from '~/composables/useCanvasMediaNavigation'
 import AssetLibraryImportDialog from '@/components/asset-libraries/AssetLibraryImportDialog.vue'
+import { IDEOGRAM_REMOVE_BACKGROUND_MODEL } from '~~/shared/utils/ideogram'
 
 const canvas = ref<{
   focusMedia: (url: string) => Promise<boolean>
   hideAsset: (id: string) => Promise<void>
 } | null>(null)
+const chat = ref<{ mentionModel: (id: string) => Promise<void> | void, mentionSkill: (id: string) => Promise<void> | void } | null>(null)
+const split = ref<{ maximizeAgent: () => void } | null>(null)
 provide(canvasMediaNavigationKey, async (url) => {
   if (!await canvas.value?.focusMedia(url))
     toast.error('This file is no longer available on the canvas.')
@@ -432,6 +435,59 @@ function onAttachCanvas(payload: {
     name: payload.prompt.trim() || 'Canvas still',
   })))
 }
+
+async function prepareCanvasSkill(payload: {
+  urls: string[]
+  prompt: string
+}) {
+  split.value?.maximizeAgent()
+  for (const item of [...attachments.value])
+    removeAttachment(item.id)
+  draft.value = ''
+  await nextTick()
+  onAttachCanvas(payload)
+  await nextTick()
+}
+
+async function onEditTextCanvas(payload: {
+  urls: string[]
+  prompt: string
+}) {
+  await prepareCanvasSkill(payload)
+  await chat.value?.mentionSkill('image-text-editor')
+  await nextTick()
+  await sendMessage()
+}
+
+async function onAnnotateImageCanvas(payload: {
+  urls: string[]
+  prompt: string
+}) {
+  await prepareCanvasSkill(payload)
+  await chat.value?.mentionSkill('image-annotation-edit')
+  await nextTick()
+  await sendMessage()
+}
+
+async function onSplitLayersCanvas(payload: {
+  urls: string[]
+  prompt: string
+}) {
+  await prepareCanvasSkill(payload)
+  await chat.value?.mentionSkill('image-layer-splitter')
+  await nextTick()
+  await sendMessage()
+}
+
+async function onRemoveBackgroundCanvas(payload: {
+  urls: string[]
+  prompt: string
+}) {
+  await prepareCanvasSkill(payload)
+  await chat.value?.mentionModel(IDEOGRAM_REMOVE_BACKGROUND_MODEL)
+  await nextTick()
+  await sendMessage()
+}
 </script>
 
 <template>
@@ -514,11 +570,12 @@ function onAttachCanvas(payload: {
       <ServiceConnection />
     </header>
 
-    <StudioSplit>
+    <StudioSplit ref="split">
       <template #left>
         <div class="flex min-h-0 flex-1 flex-col">
           <div class="min-h-0 flex-1 overflow-hidden">
             <AgentLabChat
+              ref="chat"
               v-model:draft="draft"
               v-model:quality-preference="qualityPreference"
               v-model:confirm-policy="confirmPolicy"
@@ -582,6 +639,10 @@ function onAttachCanvas(payload: {
             @move-many="requestBulk('move', $event)"
             @move="requestMove"
             @attach="onAttachCanvas"
+            @edit-text="onEditTextCanvas"
+            @annotate-image="onAnnotateImageCanvas"
+            @split-layers="onSplitLayersCanvas"
+            @remove-background="onRemoveBackgroundCanvas"
           />
         </section>
       </template>

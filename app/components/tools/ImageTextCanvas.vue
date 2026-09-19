@@ -17,6 +17,11 @@ const viewport = ref<HTMLElement>()
 const image = ref<HTMLImageElement>()
 const loaded = ref(false)
 const zoom = ref(1)
+const labelOpacity = ref(0.6)
+const labelOpacityPercent = computed({
+  get: () => Math.round(labelOpacity.value * 100),
+  set: (value: number) => { labelOpacity.value = Math.min(1, Math.max(0, Number(value) / 100)) },
+})
 const offset = ref({ x: 0, y: 0 })
 const dragging = ref(false)
 const natural = ref({ width: 1, height: 1 })
@@ -155,14 +160,44 @@ function onMarkerPointerDown(event: PointerEvent, index: number) {
   emit('select', index)
 }
 
+function focusMarker(index: number, zoomTo = 2.5) {
+  const marker = props.markers[index]
+  if (!marker || !loaded.value)
+    return
+  endDrag()
+  const nextZoom = Math.min(5, Math.max(0.5, zoomTo))
+  const localX = (marker.x / 1000 - 0.5) * fitted.value.width
+  const localY = (marker.y / 1000 - 0.5) * fitted.value.height
+  zoom.value = nextZoom
+  offset.value = {
+    x: -localX * nextZoom,
+    y: -localY * nextZoom,
+  }
+}
+
+defineExpose({ focusMarker, fit })
+
 onBeforeUnmount(endDrag)
 </script>
 
 <template>
   <div class="min-w-0 bg-muted/20">
     <div class="flex h-11 items-center justify-between gap-2 border-b border-border px-3">
-      <span class="flex items-center gap-1.5 text-xs text-muted-foreground"><Hand class="size-3.5" />Drag to pan</span>
-      <div class="flex items-center gap-1" role="group" aria-label="Image zoom controls">
+      <span class="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"><Hand class="size-3.5" />Drag to pan</span>
+      <label class="flex min-w-0 flex-1 items-center justify-center gap-2 px-2 text-xs text-muted-foreground">
+        <span class="shrink-0">Label</span>
+        <input
+          v-model.number="labelOpacityPercent"
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          class="h-1.5 w-full max-w-28 accent-foreground"
+          aria-label="Label opacity"
+        >
+        <span class="w-8 shrink-0 tabular-nums text-foreground">{{ labelOpacityPercent }}%</span>
+      </label>
+      <div class="flex shrink-0 items-center gap-1" role="group" aria-label="Image zoom controls">
         <button type="button" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30" aria-label="Zoom out" title="Zoom out" :disabled="!loaded || zoom <= 0.5" @click="setZoom(zoom - 0.25)">
           <ZoomOut class="size-4" />
         </button>
@@ -209,9 +244,9 @@ onBeforeUnmount(endDrag)
             v-for="(marker, index) in markers"
             :key="index"
             type="button"
-            class="absolute flex size-7 -translate-x-1/2 -translate-y-1/2 touch-none items-center justify-center rounded-md border border-zinc-950 text-xs font-semibold text-zinc-950 shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            class="absolute flex size-7 touch-none items-center justify-center rounded-md border border-zinc-950 text-xs font-semibold text-zinc-950 shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             :class="activeIndex === index ? 'ring-2 ring-white/60' : 'cursor-pointer'"
-            :style="{ backgroundColor: objectColor(index), left: `clamp(14px, ${marker.x / 10}%, calc(100% - 14px))`, top: `clamp(14px, ${marker.y / 10}%, calc(100% - 14px))` }"
+            :style="{ backgroundColor: objectColor(index), opacity: labelOpacity, left: `clamp(14px, ${marker.x / 10}%, calc(100% - 14px))`, top: `clamp(14px, ${marker.y / 10}%, calc(100% - 14px))`, transform: `translate(-50%, -50%) scale(${1 / zoom})` }"
             :aria-label="`Text line marker ${index + 1}`"
             :aria-pressed="activeIndex === index"
             @pointerdown="onMarkerPointerDown($event, index)"

@@ -61,11 +61,14 @@ function persistBottom() {
 
 onMounted(() => {
   const savedWidth = Number(localStorage.getItem(props.storageKey))
-  leftWidth.value = clampWidth(Number.isFinite(savedWidth) && savedWidth >= MIN_WIDTH ? savedWidth : DEFAULT_WIDTH)
+  const preferred = Number.isFinite(savedWidth) && savedWidth >= MIN_WIDTH ? savedWidth : DEFAULT_WIDTH
+  // Soft-cap a previously maximized panel so the chat does not reopen at ~80% empty.
+  const softMax = Math.floor((container.value?.clientWidth || 1280) * 0.55)
+  leftWidth.value = clampWidth(Math.min(preferred, Math.max(DEFAULT_WIDTH, softMax)))
 
   const savedRatio = Number(localStorage.getItem(mobileStorageKey.value))
   if (Number.isFinite(savedRatio) && savedRatio >= 0 && savedRatio <= 1)
-    bottomRatio.value = savedRatio
+    bottomRatio.value = Math.min(savedRatio, 0.7)
   syncBottomFromRatio()
 })
 
@@ -138,6 +141,17 @@ function onVerticalKeydown(event: KeyboardEvent) {
     persistBottom()
   }
 }
+
+function maximizeAgent() {
+  // Comfortable focus width for editor cards — not the drag handle max (80%).
+  const focus = clampWidth(Math.min(680, Math.floor((container.value?.clientWidth || 1280) * 0.48)))
+  leftWidth.value = focus
+  persistWidth()
+  setBottomHeight(Math.floor(paneMax() * 0.55))
+  persistBottom()
+}
+
+defineExpose({ maximizeAgent })
 </script>
 
 <template>

@@ -51,6 +51,14 @@ PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 [WaveSpeed]
 
 ## 更新
 
+### 2026 年 9 月 19 日 — v1.5.0
+
+1. 增加图片类型资产工具栏的 skills（Edit text、Mark edit、Split layers、Remove BG）。
+
+<p align="center">
+  <img src="docs/images/polox-readme-update-image-toolbar-skills.jpeg" alt="图片资产工具栏 skills — Edit text、Mark edit、Split layers、Remove BG" width="100%" />
+</p>
+
 ### 2026 年 9 月 19 日 — v1.4.0
 
 1. **优化 Image Text Editor**  

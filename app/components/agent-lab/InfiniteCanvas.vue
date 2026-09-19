@@ -26,6 +26,10 @@ const emit = defineEmits<{
   delete: [id: string]
   move: [id: string]
   attach: [payload: { urls: string[], prompt: string }]
+  editText: [payload: { urls: string[], prompt: string }]
+  annotateImage: [payload: { urls: string[], prompt: string }]
+  splitLayers: [payload: { urls: string[], prompt: string }]
+  removeBackground: [payload: { urls: string[], prompt: string }]
   saveToLibrary: [assets: CanvasLibraryAsset[]]
   saveToLibraryMany: [assets: CanvasLibraryAsset[]]
 }>()
@@ -725,6 +729,47 @@ onBeforeUnmount(() => {
       <p class="line-clamp-2 max-w-80 text-xs" :title="asset.name">
         {{ asset.name.replace(/^(Image|Video) · /, '') }}
       </p>
+      <div
+        v-if="showAttach && asset.url && !asset.video && !asset.audio && asset.state === 'success'"
+        class="flex flex-wrap items-start gap-2"
+      >
+        <button
+          class="inline-flex w-14 flex-col items-center gap-1 rounded-md px-1 py-1 text-primary hover:bg-primary/10"
+          aria-label="Edit text"
+          title="Edit text"
+          @click="emit('editText', { urls: [asset.url], prompt: asset.prompt })"
+        >
+          <Icon name="i-lucide-text-cursor-input" class="size-4 shrink-0" />
+          <span class="text-[10px] leading-none">Edit text</span>
+        </button>
+        <button
+          class="inline-flex w-14 flex-col items-center gap-1 rounded-md px-1 py-1 text-primary hover:bg-primary/10"
+          aria-label="Annotate to edit"
+          title="Annotate to edit"
+          @click="emit('annotateImage', { urls: [asset.url], prompt: asset.prompt })"
+        >
+          <Icon name="i-lucide-map-pin" class="size-4 shrink-0" />
+          <span class="text-[10px] leading-none">Mark edit</span>
+        </button>
+        <button
+          class="inline-flex w-16 flex-col items-center gap-1 rounded-md px-1 py-1 text-primary hover:bg-primary/10"
+          aria-label="Split layers"
+          title="Split layers"
+          @click="emit('splitLayers', { urls: [asset.url], prompt: asset.prompt })"
+        >
+          <Icon name="i-lucide-layers" class="size-4 shrink-0" />
+          <span class="text-center text-[10px] leading-tight">Split layers</span>
+        </button>
+        <button
+          class="inline-flex w-14 flex-col items-center gap-1 rounded-md px-1 py-1 text-primary hover:bg-primary/10"
+          aria-label="Remove background"
+          title="Remove background"
+          @click="emit('removeBackground', { urls: [asset.url], prompt: asset.prompt })"
+        >
+          <Icon name="i-lucide-eraser" class="size-4 shrink-0" />
+          <span class="text-[10px] leading-none">Remove BG</span>
+        </button>
+      </div>
       <div class="flex items-center justify-between text-xs text-muted-foreground">
         <span>{{ asset.video ? 'VIDEO' : 'IMAGE' }}</span>
         <div class="flex gap-1">
