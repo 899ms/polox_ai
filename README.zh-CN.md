@@ -51,6 +51,18 @@ PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 [WaveSpeed]
 
 ## 更新
 
+### 2026 年 9 月 20 日 — v1.6.0
+
+1. **图像对象移除（Image Object Removal）** — 用框选或绿色遮罩标出对象并移除，其余画面尽量保持不变。
+
+<p align="center">
+  <img src="public/brand/skills/image-object-removal.webp" alt="图像对象移除技能封面" width="480" />
+</p>
+
+2. **画布图片工具栏** — 在 Remove BG 右侧新增 **Remove object**：附上当前图、mention `image-object-removal` 后发送。
+
+3. **分辨率智能选档** — 带 1K / 2K / 4K 的 Image to Image（含文字编辑、对象移除）按源图尺寸自动选档。
+
 ### 2026 年 9 月 19 日 — v1.5.0
 
 1. 增加图片类型资产工具栏的 skills（Edit text、Mark edit、Split layers、Remove BG）。

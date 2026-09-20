@@ -51,6 +51,18 @@ PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own [WaveSpeed](https:
 
 ## Updates
 
+### September 20, 2026 — v1.6.0
+
+1. **Image Object Removal** — mark objects with boxes or green masks and remove them while keeping the rest of the image.
+
+<p align="center">
+  <img src="public/brand/skills/image-object-removal.webp" alt="Image Object Removal skill cover" width="480" />
+</p>
+
+2. **Canvas image toolbar** — added **Remove object** to the right of Remove BG; it attaches the selected image, mentions `image-object-removal`, and sends.
+
+3. **Smart resolution for Image to Image** — models with 1K / 2K / 4K tiers (including Image Text Editor and Object Removal) pick a tier from the source image size.
+
 ### September 19, 2026 — v1.5.0
 
 1. Added skills to the **image asset toolbar** on the canvas (Edit text, Mark edit, Split layers, Remove BG).

@@ -30,6 +30,7 @@ const emit = defineEmits<{
   annotateImage: [payload: { urls: string[], prompt: string }]
   splitLayers: [payload: { urls: string[], prompt: string }]
   removeBackground: [payload: { urls: string[], prompt: string }]
+  removeObject: [payload: { urls: string[], prompt: string }]
   saveToLibrary: [assets: CanvasLibraryAsset[]]
   saveToLibraryMany: [assets: CanvasLibraryAsset[]]
 }>()
@@ -768,6 +769,15 @@ onBeforeUnmount(() => {
         >
           <Icon name="i-lucide-eraser" class="size-4 shrink-0" />
           <span class="text-[10px] leading-none">Remove BG</span>
+        </button>
+        <button
+          class="inline-flex w-16 flex-col items-center gap-1 rounded-md px-1 py-1 text-primary hover:bg-primary/10"
+          aria-label="Remove object"
+          title="Remove object"
+          @click="emit('removeObject', { urls: [asset.url], prompt: asset.prompt })"
+        >
+          <Icon name="i-lucide-brush" class="size-4 shrink-0" />
+          <span class="text-center text-[10px] leading-tight">Remove object</span>
         </button>
       </div>
       <div class="flex items-center justify-between text-xs text-muted-foreground">

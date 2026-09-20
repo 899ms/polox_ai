@@ -65,6 +65,7 @@ function parseChoiceBody(body: Record<string, unknown>): ChoiceBody {
           imageUrl: typeof row.imageUrl === 'string' ? row.imageUrl : undefined,
           regions: Array.isArray(row.regions) ? row.regions as number[][] : undefined,
           annotationEdit: row.annotationEdit as import('~~/shared/utils/imageAnnotations').ImageAnnotationEdit | undefined,
+          objectRemovalEdit: row.objectRemovalEdit as import('~~/shared/utils/imageObjectRemoval').ObjectRemovalEdit | undefined,
           imageSelections: row.imageSelections as {
             imageUrl: string
             regions: number[][]

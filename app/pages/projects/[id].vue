@@ -488,6 +488,16 @@ async function onRemoveBackgroundCanvas(payload: {
   await nextTick()
   await sendMessage()
 }
+
+async function onRemoveObjectCanvas(payload: {
+  urls: string[]
+  prompt: string
+}) {
+  await prepareCanvasSkill(payload)
+  await chat.value?.mentionSkill('image-object-removal')
+  await nextTick()
+  await sendMessage()
+}
 </script>
 
 <template>
@@ -643,6 +653,7 @@ async function onRemoveBackgroundCanvas(payload: {
             @annotate-image="onAnnotateImageCanvas"
             @split-layers="onSplitLayersCanvas"
             @remove-background="onRemoveBackgroundCanvas"
+            @remove-object="onRemoveObjectCanvas"
           />
         </section>
       </template>

@@ -349,7 +349,7 @@ function emitConfirm() {
     </CardHeader>
 
     <CardContent v-if="isBatch" class="px-4">
-      <div v-if="confirmation.jobs?.length" class="divide-y divide-border overflow-hidden rounded-lg border border-border">
+      <div v-if="confirmation.jobs?.length" class="max-h-[min(50vh,28rem)] divide-y divide-border overflow-y-auto overscroll-contain rounded-lg border border-border">
         <details v-for="(job, index) in confirmation.jobs" :key="job.id" class="group px-3 py-2.5">
           <summary class="flex cursor-pointer list-none items-start gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <span class="pt-0.5 text-xs tabular-nums text-muted-foreground">{{ String(index + 1).padStart(2, '0') }}</span>

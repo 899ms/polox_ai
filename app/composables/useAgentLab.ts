@@ -1,4 +1,5 @@
 import type { ImageAnnotationEdit } from '~~/shared/utils/imageAnnotations'
+import type { ObjectRemovalEdit } from '~~/shared/utils/imageObjectRemoval'
 import { useServiceConnection } from './useServiceConnection'
 import type { AgentConfirmPolicy, AgentQuality } from '~~/shared/types/agentPreferences'
 import type { GenerationJobPublic } from '~~/shared/types/generation'
@@ -103,6 +104,7 @@ export interface ChoicePayload {
 export interface ChoiceAnswer {
   referenceImages?: { url: string, name: string }[]
   annotationEdit?: ImageAnnotationEdit
+  objectRemovalEdit?: ObjectRemovalEdit
   imageSelections?: {
     imageUrl: string
     regions: number[][]

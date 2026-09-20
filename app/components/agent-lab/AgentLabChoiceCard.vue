@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { ImageAnnotationPoint, ImageAnnotationReference } from '~~/shared/utils/imageAnnotations'
 import type { ImageLayerRegion } from '~~/shared/utils/imageLayerSplitter'
+import type { ObjectRemovalTarget } from '~~/shared/utils/imageObjectRemoval'
+import { renderObjectRemovalOverlayBlob } from '~/utils/objectRemovalOverlay'
 import type { ChoiceAnswer, ChoicePayload, ChoiceQuestion } from '~/composables/useAgentLab'
 import { standaloneImageEditQuestions, withCustomChoiceOption } from '~~/shared/utils/agentChoices'
 
@@ -30,7 +32,7 @@ const questions = computed(() => standaloneImageEditQuestions(props.choice.quest
 })))
 
 const recommendation = computed(() => {
-  const method = questions.value.find(question => question.id === 'image_edit_method')
+  const method = questions.value.find(question => question.id === 'image_edit_method' || question.id === 'object_removal_method')
   return method ? method.options.find(option => option.id === 'annotate')?.label || '' : props.choice.recommendation
 })
 const isPending = computed(() => (props.state || 'pending') === 'pending')
@@ -69,14 +71,21 @@ const imageSelections = computed(() => (props.sourceImages || []).map(image => (
   regions: (regionsByImage.value[image.url] || []).map(box => [...box] as ImageLayerRegion),
 })))
 const annotationPointsByImage = ref<Record<string, ImageAnnotationPoint[]>>({})
+const removalTargetsByImage = ref<Record<string, ObjectRemovalTarget[]>>({})
+const removalTargets = computed({
+  get: () => removalTargetsByImage.value[sourceUrl.value] || [],
+  set: (value: ObjectRemovalTarget[]) => { removalTargetsByImage.value[sourceUrl.value] = value },
+})
 const annotationPoints = computed({
   get: () => annotationPointsByImage.value[sourceUrl.value] || [],
   set: (points: ImageAnnotationPoint[]) => { annotationPointsByImage.value[sourceUrl.value] = points },
 })
 const uploading = ref(false)
 const annotating = computed(() => selections.value.image_edit_method?.optionId === 'annotate')
+const removing = computed(() => selections.value.object_removal_method?.optionId === 'annotate')
 const selecting = ref(false)
 const drawing = computed(() => selections.value.layer_selection_method?.optionId === 'draw_boxes')
+const submittingOverlay = ref(false)
 watch(() => props.sourceImages, (images) => {
   if (!images?.some(image => image.url === sourceUrl.value))
     sourceUrl.value = images?.[0]?.url || ''
@@ -91,10 +100,15 @@ watch(
     selections.value = {}
     regionsByImage.value = {}
     annotationPointsByImage.value = {}
+    removalTargetsByImage.value = {}
     for (const answer of props.answers || []) {
       if (answer.annotationEdit) {
         sourceUrl.value = answer.annotationEdit.imageUrl
         annotationPointsByImage.value[answer.annotationEdit.imageUrl] = answer.annotationEdit.points.map(point => ({ ...point }))
+      }
+      if (answer.objectRemovalEdit) {
+        sourceUrl.value = answer.objectRemovalEdit.imageUrl
+        removalTargetsByImage.value[answer.objectRemovalEdit.imageUrl] = answer.objectRemovalEdit.targets.map(target => ({ ...target, strokes: target.strokes?.map(stroke => ({ ...stroke, points: stroke.points.map(point => [...point] as [number, number]) })) }))
       }
       if (answer.optionId)
         selections.value[answer.questionId] = { optionId: answer.optionId, text: answer.text || '' }
@@ -106,11 +120,11 @@ watch(
       }
     }
     // Open the annotation canvas immediately when Annotate is the recommended method.
-    const method = questions.value.find(question => question.id === 'image_edit_method')
-    if (method && method.recommendedId === 'annotate' && !selections.value.image_edit_method && method.options.some(option => option.id === 'annotate')) {
+    const method = questions.value.find(question => question.id === 'image_edit_method' || question.id === 'object_removal_method')
+    if (method && method.recommendedId === 'annotate' && !selections.value[method.id] && method.options.some(option => option.id === 'annotate')) {
       selections.value = {
         ...selections.value,
-        image_edit_method: { optionId: 'annotate', text: '' },
+        [method.id]: { optionId: 'annotate', text: '' },
       }
     }
     // Draw-only method cards: open the region selector immediately.
@@ -169,6 +183,8 @@ const canSubmit = computed(() => {
     return false
   if (annotating.value && (!sourceUrl.value || !annotationPoints.value.length || annotationPoints.value.some(point => !point.text.trim())))
     return false
+  if (removing.value && (!sourceUrl.value || !removalTargets.value.length || selecting.value || submittingOverlay.value))
+    return false
   if (drawing.value && (!imageSelections.value.length || imageSelections.value.some(selection => !selection.regions.length) || selecting.value))
     return false
   return questions.value.every((question) => {
@@ -181,9 +197,35 @@ const canSubmit = computed(() => {
   })
 })
 
-function emitSubmit() {
+async function emitSubmit() {
   if (!canSubmit.value)
     return
+  let objectRemovalEdit: { imageUrl: string, targets: ObjectRemovalTarget[], annotatedImageUrl?: string } | undefined
+  if (removing.value) {
+    objectRemovalEdit = {
+      imageUrl: sourceUrl.value,
+      targets: removalTargets.value.map(target => ({
+        ...target,
+        strokes: target.strokes?.map(stroke => ({ ...stroke, points: stroke.points.map(point => [...point] as [number, number]) })),
+      })),
+    }
+    if (props.uploadImage) {
+      submittingOverlay.value = true
+      uploading.value = true
+      try {
+        const blob = await renderObjectRemovalOverlayBlob(sourceUrl.value, objectRemovalEdit.targets)
+        const uploaded = await props.uploadImage(new File([blob], 'object-removal-overlay.png', { type: 'image/png' }))
+        objectRemovalEdit.annotatedImageUrl = uploaded.url
+      }
+      catch {
+        // Server will render the overlay from targets if the client export/upload fails.
+      }
+      finally {
+        submittingOverlay.value = false
+        uploading.value = false
+      }
+    }
+  }
   emit('submit', questions.value.map((question) => {
     const current = selections.value[question.id]
     const option = selectedOption(question)
@@ -194,6 +236,9 @@ function emitSubmit() {
       text: current?.text.trim() || undefined,
       ...(question.id === 'image_edit_method' && current?.optionId === 'annotate'
         ? { annotationEdit: { imageUrl: sourceUrl.value, points: annotationPoints.value.map(point => ({ ...point })) } }
+        : {}),
+      ...(question.id === 'object_removal_method' && current?.optionId === 'annotate' && objectRemovalEdit
+        ? { objectRemovalEdit }
         : {}),
       ...(question.id === 'layer_selection_method' && current?.optionId === 'draw_boxes'
         ? { imageSelections: imageSelections.value }
@@ -405,6 +450,17 @@ const resolvedAnswers = computed(() => {
             Upload a source image in the chat first.
           </p>
         </section>
+        <section v-if="removing" class="flex min-w-0 flex-col gap-3" aria-label="Mark objects to remove">
+          <div v-if="(sourceImages?.length || 0) > 1" class="flex flex-wrap gap-2" aria-label="Choose image">
+            <button v-for="image in sourceImages" :key="image.id" type="button" class="rounded-lg border p-1" :class="sourceUrl === image.url ? 'border-primary' : 'border-border'" :aria-pressed="sourceUrl === image.url" :disabled="pending || readOnly || uploading" @click="sourceUrl = image.url">
+              <img :src="image.url" alt="Select image" class="size-16 object-contain">
+            </button>
+          </div>
+          <ToolsImageObjectRemovalEditor v-if="sourceUrl" :key="sourceUrl" v-model="removalTargets" :src="sourceUrl" :disabled="pending || readOnly || uploading" @selecting="selecting = $event" />
+          <p v-else role="status" class="text-sm text-muted-foreground">
+            Upload a source image in the chat first.
+          </p>
+        </section>
         <section v-if="drawing" class="flex min-w-0 flex-col gap-3" aria-label="Select image layers">
           <p class="text-sm text-muted-foreground">
             Draw boxes on each image, then confirm all images together. Your boxes are saved when switching images.
@@ -468,7 +524,7 @@ const resolvedAnswers = computed(() => {
         @click="emitSubmit"
       >
         <Spinner v-if="pending" />
-        {{ annotating ? 'Confirm edits' : drawing ? `Confirm ${imageSelections.length} image${imageSelections.length === 1 ? '' : 's'}` : 'Continue' }}
+        {{ annotating ? 'Confirm edits' : removing ? 'Confirm objects' : drawing ? `Confirm ${imageSelections.length} image${imageSelections.length === 1 ? '' : 's'}` : 'Continue' }}
       </Button>
     </CardFooter>
   </Card>

@@ -47,7 +47,7 @@ async function uploadReference(file: File) {
               Choose Add annotation point, then click the image.<br>Describe each edit here.
             </p>
           </div>
-          <ol v-else class="max-h-[300px] min-h-0 flex-1 space-y-2 overflow-y-auto p-2 lg:max-h-none">
+          <ol v-else class="max-h-[300px] min-h-0 flex-1 space-y-2 overflow-y-auto p-2 lg:max-h-[480px]">
             <li v-for="(point, index) in points" :key="index" class="min-w-0 rounded-lg border p-2" :class="index === activeIndex ? 'border-border bg-accent' : 'border-transparent'">
               <div class="mb-2 flex items-center justify-between gap-2">
                 <button type="button" :disabled="disabled || uploading" :aria-pressed="index === activeIndex" class="flex min-w-0 items-center gap-2 text-sm" @click="selectObject(index)">

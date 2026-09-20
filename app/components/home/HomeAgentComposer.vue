@@ -122,10 +122,28 @@ watch([selectedProjectId], () => {
 }, { immediate: true, flush: 'sync' })
 onBeforeUnmount(() => projectJobsController?.abort())
 const chat = useTemplateRef('chat')
+async function mentionSkill(skillId: string) {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    if (chat.value?.mentionSkill) {
+      await chat.value.mentionSkill(skillId)
+      break
+    }
+    await nextTick()
+  }
+  // Homepage has no inline sketch canvas (sketch-in-project-only). Always try to
+  // open/create the project sketch agent after inserting the skill — including
+  // when /sketch-to-image was already in the draft (watch would no-op).
+  if (skillId === SKETCH_TO_IMAGE_TOOL) {
+    await nextTick()
+    await openSketchInProject()
+  }
+}
+
 defineExpose({
-  mentionSkill: (skillId: string) => chat.value?.mentionSkill(skillId),
+  mentionSkill,
   mentionModel: (modelId: string) => chat.value?.mentionModel(modelId),
   mentionTask: (task: string) => chat.value?.mentionTask(task),
+  openSketchInProject,
 })
 const projectReady = computed(() => Boolean(selectedProjectId.value))
 const creatingProject = ref(false)

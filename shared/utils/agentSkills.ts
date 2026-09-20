@@ -48,6 +48,15 @@ export const PUBLIC_AGENT_SKILLS = [
     coverAlt: 'PoloX AI Annotated Image Edit skill cover — before and after with numbered edit markers',
   },
   {
+    id: 'image-object-removal',
+    icon: 'lucide:eraser',
+    name: 'Image Object Removal',
+    description: 'Mark objects with boxes or masks and remove them while keeping the rest of the image.',
+    keywords: 'image object removal erase inpaint 对象移除 remove object',
+    cover: '/brand/skills/image-object-removal.webp',
+    coverAlt: 'PoloX AI Image Object Removal skill cover — mark and remove objects while keeping the rest',
+  },
+  {
     id: 'image-layer-splitter',
     icon: 'lucide:layers',
     name: 'Image Layer Splitter',
@@ -56,7 +65,6 @@ export const PUBLIC_AGENT_SKILLS = [
     cover: '/brand/skills/image-layer-splitter.webp',
     coverAlt: 'PoloX AI Image Layer Splitter skill cover — extract objects as transparent PNG layers',
   },
-
   {
     id: 'long-form-video',
     icon: 'lucide:clapperboard',

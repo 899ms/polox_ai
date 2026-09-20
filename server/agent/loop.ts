@@ -6,12 +6,14 @@ import { standaloneImageEditQuestions, withCustomChoiceOption } from '~~/shared/
 import { validateLayerSelection, validateLayerSelections } from '~~/shared/utils/agentLayerSelection'
 import { AGENT_MODELS, findAgentModelTool, readModelMentions, registeredModelTools } from '~~/shared/utils/agentModels'
 import { validateImageAnnotationEdit } from '~~/shared/utils/imageAnnotations'
+import { validateObjectRemovalEdit } from '~~/shared/utils/imageObjectRemoval'
 import { validateTextEditAnswer, validateTextEditAnswers } from '~~/shared/utils/imageTextEditor'
 import { validateAnnotationReferences, validateProjectImageReferences } from './annotationReferences'
 import { concatVideoUrls } from './concat'
 import { EXPORT_ZIP_TOOL, exportSessionZip, resolveZipExport } from './exportZip'
 import { removeBackground } from './fal'
 import { renderAnnotationImage } from './imageAnnotations'
+import { renderObjectRemovalOverlay } from './imageObjectRemoval'
 import { confirmedTextEdit, detectImageText, textEditNeedsSummary } from './imageTextEditor'
 import { confirmedLayerSelections, hasLayerSourceImage, isLayerSplitterModelId, isLayerSplitterRequest, layerSplitAwaitingAdjust, layerSplitNeedsConfirm, layerSplitNeedsPlan, layerSplitNeedsSummary, needsLayerDescriptionCard } from './layerSplitBrief'
 import { renderLayerSelectionOverlay } from './layerSelectionOverlay'
@@ -1741,6 +1743,7 @@ function formatChoiceResult(payload: NonNullable<AgentSession['pendingChoice']>[
         ...selection,
         ...(question.id === 'sketch_references' && option.id === 'yes' ? { referenceImages: validateSketchReferences(row.referenceImages) } : {}),
         ...(question.id === 'image_edit_method' && option.id === 'annotate' ? { annotationEdit: validateImageAnnotationEdit(row.annotationEdit, sourceUrls) } : {}),
+        ...(question.id === 'object_removal_method' && option.id === 'annotate' ? { objectRemovalEdit: validateObjectRemovalEdit(row.objectRemovalEdit, sourceUrls) } : {}),
       }
     }
     if (text) {
@@ -1804,6 +1807,12 @@ export async function handleChoice(sessionId: string, body: ChoiceBody, emit: Em
       annotation.annotatedImageUrl = await renderAnnotationImage(annotation, session.id, signal)
       result = JSON.stringify(annotationResult)
     }
+    const objectRemoval = annotationResult.answers?.find(answer => answer.objectRemovalEdit)?.objectRemovalEdit
+    if (objectRemoval) {
+      if (!objectRemoval.annotatedImageUrl)
+        objectRemoval.annotatedImageUrl = await renderObjectRemovalOverlay(objectRemoval, session.id, signal)
+      result = JSON.stringify(annotationResult)
+    }
     session.pendingChoice = null
     const preference = modelPreferenceFromChoice(pending.payload, body)
     if (preference) {
@@ -1832,6 +1841,21 @@ export async function handleChoice(sessionId: string, body: ChoiceBody, emit: Em
       textEdits?: {
         imageUrl: string
       }[]
+    }
+    const removalEdit = confirmed.answers?.find(answer => answer.questionId === 'object_removal_method' && answer.optionId === 'annotate')?.objectRemovalEdit
+    if (removalEdit?.annotatedImageUrl && !sessionWantsStop(session)) {
+      session.messages.push({
+        role: 'user',
+        internal: true,
+        content: [
+          { type: 'text', text: 'Image Object Removal: the user marked objects to remove. Image 1 is the original; image 2 is the annotated overlay (numbered boxes and/or green masks). Visually identify each marked object using any user labels. Then call ask_user with question id object_removal_confirm. In the question prompt, put each marked object on its own line (real newline characters after every Box/Mask line), then a short confirmation question. Do not generate yet.' },
+          { type: 'text', text: 'Original image:' },
+          { type: 'image_url', image_url: { url: removalEdit.imageUrl } },
+          { type: 'text', text: 'Annotated overlay:' },
+          { type: 'image_url', image_url: { url: removalEdit.annotatedImageUrl } },
+        ],
+      })
+      touch(session)
     }
     const textEdits = confirmed.textEdits || (confirmed.textEdit ? [confirmed.textEdit] : [])
     const layerMethod = confirmed.answers?.find(answer => answer.questionId === 'layer_selection_method' && answer.optionId === 'draw_boxes')

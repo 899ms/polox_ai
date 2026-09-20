@@ -2,6 +2,7 @@ import type { AgentSession } from './session'
 import type { AgentEvent, AgentImage } from './types'
 import { AGENT_MODELS, findAgentModelTool, readModelMentions, validateAgentModelInput } from '~~/shared/utils/agentModels'
 import { IMAGE_TEXT_EDITOR_MODEL, textEditPrompt } from '~~/shared/utils/imageTextEditor'
+import { adaptImageKResolution, constrainImageKResolution, imageKResolutionFamily, modelIsImageToImage, modelSupportsImageKResolution, pickNearestImageResolution } from '~~/shared/utils/imageResolution'
 import { SKETCH_TO_IMAGE_MODEL, SKETCH_TO_IMAGE_TOOL } from '~~/shared/utils/sketchToImage'
 import { wavespeedEndpoint } from '../../shared/utils/wavespeedSchema'
 import { GenerationJob } from '../models/generationJob'
@@ -10,6 +11,8 @@ import { sanitizeGenerateInput } from '../utils/generateInput'
 import { refreshGenerationJob } from '../utils/generationPipeline'
 import { toPublicJob } from '../utils/generationResults'
 import { confirmedAnnotationEdit } from './imageAnnotations'
+import { confirmedObjectRemovalEdit } from './imageObjectRemoval'
+import { probeImageDimensions } from './imageDimensions'
 import { confirmedTextEdit } from './imageTextEditor'
 import { confirmedLayerSelections, isLayerSplitterModelId, isLayerSplitterRequest, layerSplitBlocksGeneration, layerSplitNeedsConfirm, layerSplitNeedsPlan } from './layerSplitBrief'
 import { persistNow, upsertImage } from './session'
@@ -62,7 +65,16 @@ export async function prepareModelGeneration(tool: string, json: string, session
       throw new Error('Open the text editor and wait for the user to confirm edits first.')
     const modelId = IMAGE_TEXT_EDITOR_MODEL
     const prompt = textEditPrompt(edit.lines)
-    const input = sanitizeGenerateInput(modelId, { prompt, quality: 'high', images: [edit.imageUrl] })
+    let resolution = '1k'
+    try {
+      const dims = await probeImageDimensions(edit.imageUrl)
+      resolution = adaptImageKResolution(
+        constrainImageKResolution(pickNearestImageResolution(dims.width, dims.height), 'auto', imageKResolutionFamily(modelId)),
+        ['1k', '2k', '4k'],
+      )
+    }
+    catch { /* Keep 1k if probing fails. */ }
+    const input = sanitizeGenerateInput(modelId, { prompt, quality: 'high', resolution, images: [edit.imageUrl] })
     return { modelId, name: 'Image text edit', input, requestModel: wavespeedEndpoint(modelId)!, uncertainFields: [], inputUrls: [edit.imageUrl] }
   }
   const selected = selectedModelIds(session).map(id => id === SKETCH_TO_IMAGE_TOOL ? SKETCH_TO_IMAGE_MODEL : id)
@@ -113,9 +125,37 @@ export async function prepareModelGeneration(tool: string, json: string, session
     const urls = Array.isArray(raw[imageField]) ? raw[imageField] : []
     raw[imageField] = [...new Set([annotation.imageUrl, annotation.annotatedImageUrl, ...annotation.points.flatMap(point => (point.references || []).map(reference => reference.url)), ...urls])]
   }
+  const objectRemoval = confirmedObjectRemovalEdit(session)
+  if (objectRemoval && model.task === 'Image to Image') {
+    const imageField = ['images', 'input_urls', 'image_urls', 'image_input'].find(key => key in model.schema.components.schemas.Input.properties)
+    if (!imageField)
+      throw new Error('This model cannot accept the original image and removal overlay.')
+    const urls = Array.isArray(raw[imageField]) ? raw[imageField] : []
+    raw[imageField] = [...new Set([objectRemoval.imageUrl, objectRemoval.annotatedImageUrl, ...urls])]
+  }
 
   const validated = validateAgentModelInput(model, raw)
   const input = sanitizeGenerateInput(model.id, validated)
+  if (modelSupportsImageKResolution(model) && modelIsImageToImage(model)) {
+    const imageField = ['images', 'input_urls', 'image_urls', 'image_input', 'image_url', 'image'].find(key => key in input)
+    const first = imageField
+      ? (Array.isArray(input[imageField]) ? input[imageField][0] : input[imageField])
+      : undefined
+    if (typeof first === 'string' && /^https?:\/\//i.test(first)) {
+      try {
+        const dims = await probeImageDimensions(first)
+        const aspect = String(input.aspect_ratio || 'auto')
+        const picked = constrainImageKResolution(
+          pickNearestImageResolution(dims.width, dims.height),
+          aspect,
+          imageKResolutionFamily(model.id),
+        )
+        const enumValues = model.schema.components.schemas.Input.properties.resolution?.enum
+        input.resolution = adaptImageKResolution(picked, enumValues)
+      }
+      catch { /* Keep sanitized resolution if probing fails. */ }
+    }
+  }
   const name = String(raw._name || model.name).slice(0, 100)
   return {
     modelId: model.id,

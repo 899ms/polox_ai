@@ -516,11 +516,15 @@ async function mentionTask(task: string) {
 
 async function mentionSkill(skillId: string) {
   const skill = PUBLIC_AGENT_SKILLS.find(item => item.id === skillId)
-  if (!skill || composerLocked.value)
+  if (!skill)
     return
+  // Still insert the skill when the composer is locked (e.g. pending confirm on
+  // another agent context) so homepage skill cards / deep links are not no-ops.
   draft.value = [`/${skill.id}`, composerText.value].join(' ')
   mention.value = null
   await nextTick()
+  if (composerLocked.value)
+    return
   const input = composerInput.value?.$el as HTMLTextAreaElement | undefined
   input?.focus({ preventScroll: true })
 }
@@ -622,20 +626,13 @@ const latestConfirmedId = computed(() => {
 const activeBusy = computed(() => props.pending || (props.status !== 'idle') || hasGeneratingMedia.value)
 const prefsLocked = computed(() => activeBusy.value)
 const compactComposer = computed(() => activeBusy.value)
-const statusInlineVisible = computed(() => {
-  if (!statusLabel.value || !latestConfirmedId.value)
-    return false
-  return mediaWorking.value || props.status === 'generating' || props.status === 'queued'
-})
 function workingFor(message: AgentChatMessage) {
   return confirmationWorking(message, props.images, mediaWorking.value && message.id === latestConfirmedId.value)
 }
-function statusInlineFor(message: AgentChatMessage) {
-  return statusInlineVisible.value && workingFor(message)
-}
+
 function layerSourceImages(message: AgentChatMessage) {
   const index = props.messages.findIndex(item => item.id === message.id)
-  if (message.choice?.questions.some(question => question.id === 'image_edit_method')) {
+  if (message.choice?.questions.some(question => question.id === 'image_edit_method' || question.id === 'object_removal_method')) {
     const previous = props.messages.slice(0, index).reverse()
     const request = previous.find(item => item.role === 'user')
     const stills = (item: AgentChatMessage) => messageMedia(item, props.images)
@@ -919,7 +916,7 @@ function setActiveAgent(value: unknown) {
           :message="message"
           :images="thumbsFor(message)"
         >
-          <template v-if="message.confirmation || message.choice || statusInlineFor(message)" #default>
+          <template v-if="message.confirmation || message.choice" #default>
             <AgentLabConfirmCard
               v-if="message.confirmation"
               :confirmation="message.confirmation"
@@ -945,14 +942,6 @@ function setActiveAgent(value: unknown) {
               @skip="emit('skipChoice')"
             />
 
-            <p
-              v-if="statusInlineFor(message)"
-              class="flex items-center gap-2 text-xs text-muted-foreground"
-              aria-live="polite"
-            >
-              <Spinner />
-              {{ statusLabel }}
-            </p>
           </template>
         </AgentLabMessage>
 
@@ -992,28 +981,40 @@ function setActiveAgent(value: unknown) {
           </CardFooter>
         </Card>
 
-        <p
-          v-if="statusLabel && !statusInlineVisible"
-          class="flex items-center gap-2 border-t border-border pt-2 text-xs text-muted-foreground"
+        <div
+          v-if="statusLabel"
+          class="flex items-center gap-2 pt-1"
+          role="status"
           aria-live="polite"
+          :aria-label="statusLabel"
         >
-          <Spinner />
-          {{ statusLabel }}
-        </p>
+          <span class="flex items-center gap-1.5" aria-hidden="true">
+            <span class="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
+            <span class="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
+            <span class="size-1.5 animate-bounce rounded-full bg-primary" />
+          </span>
+          <span class="text-xs text-muted-foreground">{{ statusLabel }}</span>
+        </div>
         <p v-if="error" class="text-xs text-destructive">
           {{ error }}
         </p>
       </div>
     </div>
 
-    <p
+    <div
       v-if="(composerOnly || hideTranscript) && statusLabel"
-      class="flex items-center gap-2 px-3 pt-3 text-xs text-muted-foreground"
+      class="flex items-center gap-2 px-3 pt-3"
+      role="status"
       aria-live="polite"
+      :aria-label="statusLabel"
     >
-      <Spinner />
-      {{ statusLabel }}
-    </p>
+      <span class="flex items-center gap-1.5" aria-hidden="true">
+        <span class="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
+        <span class="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
+        <span class="size-1.5 animate-bounce rounded-full bg-primary" />
+      </span>
+      <span class="text-xs text-muted-foreground">{{ statusLabel }}</span>
+    </div>
     <p
       v-if="(composerOnly || hideTranscript) && error"
       class="px-3 pt-3 text-xs text-destructive"

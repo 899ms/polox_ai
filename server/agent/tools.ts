@@ -607,7 +607,7 @@ function parseAskQuestion(raw: unknown, index: number, seen: Set<string>): Choic
   if (!raw || typeof raw !== 'object')
     return null
   const row = raw as Record<string, unknown>
-  const prompt = clipAsk(row.prompt ?? row.question ?? row.label, row.id === 'sketch_prompt' ? 8000 : row.id === 'sketch_understanding' ? 4000 : 2000)
+  const prompt = clipAsk(row.prompt ?? row.question ?? row.label, row.id === 'sketch_prompt' ? 8000 : (row.id === 'sketch_understanding' || row.id === 'object_removal_confirm') ? 4000 : 2000)
   if (!prompt)
     return null
   const optionSeen = new Set<string>()
@@ -638,6 +638,22 @@ function parseAskQuestion(raw: unknown, index: number, seen: Set<string>): Choic
   if (unique === 'layer_split_confirm') {
     for (const option of options) {
       if (['yes', 'ok', 'correct', 'looks_good', 'looks-good', 'proceed', 'confirm_extract', 'confirm-extract'].includes(option.id))
+        option.id = 'confirm'
+      else if (['no', 'fix', 'revise', 'correct_more', 'need_changes', 'need-changes', 'edit'].includes(option.id))
+        option.id = 'adjust'
+    }
+  }
+  if (unique === 'object_removal_method') {
+    for (const option of options) {
+      if (option.id === 'mark' || option.id === 'mask' || option.id === 'boxes' || option.id === 'draw' || option.id === 'annotate_image')
+        option.id = 'annotate'
+      else if (option.id === 'text' || option.id === 'description' || option.id === 'describe_text')
+        option.id = 'describe'
+    }
+  }
+  if (unique === 'object_removal_confirm') {
+    for (const option of options) {
+      if (['yes', 'ok', 'correct', 'looks_good', 'looks-good', 'proceed'].includes(option.id))
         option.id = 'confirm'
       else if (['no', 'fix', 'revise', 'correct_more', 'need_changes', 'need-changes', 'edit'].includes(option.id))
         option.id = 'adjust'
@@ -686,7 +702,7 @@ export function parseAskUserArgs(raw: string): AskUserArgs {
 
   return {
     prompt: clipAsk(parsed.prompt ?? parsed.intro, 2000),
-    recommendation: questions.find(question => question.id === 'image_edit_method')?.options.find(option => option.id === 'annotate')?.label ?? clipAsk(parsed.recommendation ?? parsed.hint, 400),
+    recommendation: questions.find(question => question.id === 'image_edit_method' || question.id === 'object_removal_method')?.options.find(option => option.id === 'annotate')?.label ?? clipAsk(parsed.recommendation ?? parsed.hint, 400),
     questions: standaloneImageEditQuestions(questions),
   }
 }

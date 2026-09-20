@@ -21,8 +21,10 @@ export function withCustomChoiceOption<T extends CustomChoiceOption>(options: T[
   }]
 }
 
+const STANDALONE_METHOD_IDS = new Set(['image_edit_method', 'object_removal_method'])
+
 /** Method selection is a standalone checkpoint, including restored cards. */
-export function standaloneImageEditQuestions<T extends { id: string }>(questions: T[]): T[] {
-  const method = questions.find(question => question.id === 'image_edit_method')
+export function standaloneImageEditQuestions<T extends { id: string, recommendedId?: string }>(questions: T[]): T[] {
+  const method = questions.find(question => STANDALONE_METHOD_IDS.has(question.id))
   return method ? [{ ...method, recommendedId: 'annotate' }] : questions
 }
