@@ -150,10 +150,15 @@ const canTestSkill = computed(() => {
     return false
   if (!boundSkillId.value)
     return false
-  if (!boundSkillStatusReady.value)
-    return true
+  // First load: hide Test until status arrives. Later refreshes must not flip this off —
+  // that unmounts the Test tab mid-run (model-value stays "test").
+  if (!boundSkillStatusReady.value && !boundSkillStatus.value)
+    return false
   return boundSkillStatus.value !== 'draft'
 })
+
+/** Keep Test trigger mounted while already testing, even if status briefly reloads. */
+const showTestTab = computed(() => canTestSkill.value || skillMode.value === 'test')
 
 async function refreshBoundSkillStatus() {
   const id = boundSkillId.value
@@ -162,7 +167,11 @@ async function refreshBoundSkillStatus() {
     boundSkillStatusReady.value = true
     return
   }
-  boundSkillStatusReady.value = false
+  // Do not clear ready on refetch — that made canTestSkill false and removed the Test tab
+  // while skillMode was still "test" (tabs looked gone during generation).
+  const hadReady = boundSkillStatusReady.value
+  if (!hadReady)
+    boundSkillStatusReady.value = false
   let fetched = false
   try {
     const data = await $fetch<{ status?: string }>(`/api/skills/${encodeURIComponent(id)}`)
@@ -620,11 +629,16 @@ onMounted(() => {
 })
 
 watch(
-  () => [route.query.agentSkill, route.query.skillMode, route.query.skillSwitch, project.value?.kind, project.value?.id, boundSkillStatusReady.value, canTestSkill.value],
+  () => [route.query.agentSkill, route.query.skillMode, route.query.skillSwitch, project.value?.kind, project.value?.id],
   () => {
     void applySkillWorkspaceQuery()
   },
 )
+// When Test becomes eligible after a first status fetch, finish a pending Test activation.
+watch(canTestSkill, (ok) => {
+  if (ok && (pendingSkillMode.value === 'test' || readSkillModeQuery(route.query.skillMode) === 'test'))
+    void applySkillWorkspaceQuery()
+})
 
 // When a skill is first bound, soft-prime Test mode only (never Edit).
 watch(
@@ -1273,8 +1287,9 @@ async function onRemoveObjectCanvas(payload: { urls: string[], prompt: string })
                     Edit
                   </TabsTrigger>
                   <TabsTrigger
-                    v-if="canTestSkill"
+                    v-if="showTestTab"
                     value="test"
+                    :disabled="!canTestSkill && skillMode !== 'test'"
                     class="h-9 rounded-none border-b-2 border-transparent px-3 text-xs text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none"
                   >
                     Test
