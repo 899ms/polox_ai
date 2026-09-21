@@ -7,7 +7,7 @@ import type { AgentChatMessage, AgentConfirmPolicy, AgentImage, AgentListItem, A
 import { ArrowUp, ChevronDown, Paperclip, Plus, Square, X } from 'lucide-vue-next'
 import { normalizeComposerSelection } from '~~/shared/utils/agentComposerSelection'
 import { AGENT_MODELS, agentModelLogo, modelMention, publicAgentModels, readModelMentions, stripModelMentions } from '~~/shared/utils/agentModels'
-import { composerPlaceholderForSkills, findComposerCommand, PUBLIC_AGENT_SKILLS, readSkillCommands, searchAgentSkills, stripSkillCommands } from '~~/shared/utils/agentSkills'
+import { composerPlaceholderForSkills, findComposerCommand, mergeAgentSkillCatalog, PUBLIC_AGENT_SKILLS, readSkillCommands, searchAgentSkills, stripSkillCommands, type CatalogAgentSkill } from '~~/shared/utils/agentSkills'
 import { isMediaVideoUrl } from '~~/shared/utils/seedance25'
 import { SKETCH_TO_IMAGE_TOOL } from '~~/shared/utils/sketchToImage'
 import { agentComposerPlaceholder } from '~/utils/agentComposerPlaceholder'
@@ -40,6 +40,9 @@ const props = withDefaults(defineProps<{
   canCreateAgent?: boolean
   canSwitchAgent?: boolean
   composerOnly?: boolean
+  hideAgentChrome?: boolean
+  /** Skill ids that cannot be removed from the composer (e.g. skill project Edit/Test). */
+  lockedSkillIds?: string[]
   hideTranscript?: boolean
 }>(), {
   projectJobs: () => [],
@@ -49,6 +52,8 @@ const props = withDefaults(defineProps<{
   canCreateAgent: true,
   canSwitchAgent: true,
   composerOnly: false,
+  hideAgentChrome: false,
+  lockedSkillIds: () => [],
   hideTranscript: false,
   stopping: false,
   choiceOpen: false,
@@ -99,7 +104,16 @@ watch(draft, (text) => {
     draft.value = normalized
 }, { immediate: true, flush: 'sync' })
 
-const selectedSkills = computed(() => readSkillCommands(draft.value))
+const { data: skillsApi } = useFetch<{ catalog?: CatalogAgentSkill[], userSkills?: CatalogAgentSkill[] }>('/api/skills', {
+  default: () => ({ catalog: [], userSkills: [] }),
+})
+const skillCatalog = computed(() => {
+  if (skillsApi.value?.catalog?.length)
+    return skillsApi.value.catalog
+  return mergeAgentSkillCatalog(skillsApi.value?.userSkills || [])
+})
+
+const selectedSkills = computed(() => readSkillCommands(draft.value, skillCatalog.value))
 const selectedSkillCommands = computed(() => selectedSkills.value.map(skill => `/${skill.id}`))
 const selectedModels = computed(() => readModelMentions(draft.value).map(id => AGENT_MODELS.find(model => model.id === id)!))
 const sketchSelected = computed(() => selectedModels.value.some(model => model.id === SKETCH_TO_IMAGE_TOOL) || selectedSkills.value.some(skill => skill.id === SKETCH_TO_IMAGE_TOOL))
@@ -120,11 +134,11 @@ watch(sketchKey, () => {
   sketchError.value = ''
 })
 const composerText = computed({
-  get: () => stripSkillCommands(stripModelMentions(draft.value)),
+  get: () => stripSkillCommands(stripModelMentions(draft.value), skillCatalog.value),
   set: (text: string) => { draft.value = [...selectedModels.value.map(modelMention), ...selectedSkillCommands.value, text].join(' ') },
 })
 const mention = ref<ReturnType<typeof findComposerCommand>>(null)
-const skillMatches = computed(() => searchAgentSkills(mention.value?.query || '').filter(skill => !selectedSkills.value.some(selected => selected.id === skill.id)))
+const skillMatches = computed(() => (props.lockedSkillIds || []).length ? [] as CatalogAgentSkill[] : searchAgentSkills(mention.value?.query || '', skillCatalog.value).filter(skill => !selectedSkills.value.some(selected => selected.id === skill.id)))
 watch(() => mention.value?.trigger, (trigger) => {
   if (trigger === '@')
     emit('browseAssets')
@@ -182,7 +196,15 @@ function updateMention(event: Event) {
     ...(above ? { bottom: `${window.innerHeight - bounds.top + 8}px` } : { top: `${bounds.bottom + 8}px` }),
   }
   const end = input.selectionStart || 0
-  mention.value = findComposerCommand(input.value, end)
+  mention.value = findComposerCommand(input.value, end, skillCatalog.value)
+  // Skill project Edit/Test: keep the locked skill chip only — do not open the skill picker on /
+  if (mention.value?.trigger === '/' && (props.lockedSkillIds || []).length) {
+    mention.value = null
+    if (mentionColumn.value === 'skills')
+      mentionColumn.value = 'models'
+    mentionIndex.value = 0
+    return
+  }
   if (mention.value?.trigger === '/')
     mentionColumn.value = 'skills'
   else if (mentionColumn.value === 'skills')
@@ -193,9 +215,35 @@ function removeModel(id: string) {
   draft.value = [...selectedModels.value.filter(model => model.id !== id).map(modelMention), ...selectedSkillCommands.value, composerText.value].join(' ')
 }
 
+function isSkillLocked(id: string) {
+  return (props.lockedSkillIds || []).includes(id)
+}
+
 function removeSkill(id: string) {
+  if (isSkillLocked(id))
+    return
+
   draft.value = [...selectedModels.value.map(modelMention), ...selectedSkills.value.filter(skill => skill.id !== id).map(skill => `/${skill.id}`), composerText.value].join(' ')
 }
+watch(draft, (text) => {
+  const locked = props.lockedSkillIds || []
+  if (!locked.length)
+    return
+  const raw = String(text || '')
+  const skills = readSkillCommands(raw, skillCatalog.value)
+  const unauthorized = skills.filter(skill => !locked.includes(skill.id))
+  const missing = locked.filter(id => !new RegExp(`(?:^|\\s)/${id}(?=\\s|$)`).test(raw))
+  if (!unauthorized.length && !missing.length)
+    return
+  const clean = stripSkillCommands(stripModelMentions(raw), skillCatalog.value).replace(/\s+/g, ' ').trim()
+  draft.value = [
+    ...selectedModels.value.map(modelMention),
+    ...locked.map(id => `/${id}`),
+    clean,
+  ].filter(Boolean).join(' ')
+})
+
+
 watch(() => props.activeAgentId, () => { mention.value = null })
 watch(draft, (text) => {
   if (!text)
@@ -488,7 +536,7 @@ async function mentionModel(modelId: string) {
   const model = AGENT_MODELS.find(item => item.id === modelId)
   if (!model || composerLocked.value)
     return
-  const skill = PUBLIC_AGENT_SKILLS.find(item => item.id === modelId)
+  const skill = skillCatalog.value.find(item => item.id === modelId) || PUBLIC_AGENT_SKILLS.find(item => item.id === modelId)
   if (skill) {
     await mentionSkill(skill.id)
     return
@@ -515,11 +563,19 @@ async function mentionTask(task: string) {
 }
 
 async function mentionSkill(skillId: string) {
-  const skill = PUBLIC_AGENT_SKILLS.find(item => item.id === skillId)
+  const skill = skillCatalog.value.find(item => item.id === skillId) || PUBLIC_AGENT_SKILLS.find(item => item.id === skillId)
   if (!skill)
     return
   // Still insert the skill when the composer is locked (e.g. pending confirm on
   // another agent context) so homepage skill cards / deep links are not no-ops.
+  // Dedupe: never prepend a second /id when it is already selected.
+  if (selectedSkills.value.some(item => item.id === skill.id)) {
+    mention.value = null
+    await nextTick()
+    if (!composerLocked.value)
+      (composerInput.value?.$el as HTMLTextAreaElement | undefined)?.focus({ preventScroll: true })
+    return
+  }
   draft.value = [`/${skill.id}`, composerText.value].join(' ')
   mention.value = null
   await nextTick()
@@ -533,6 +589,9 @@ defineExpose({ mentionModel, mentionTask, mentionSkill })
 
 async function selectSkill(skill: ReturnType<typeof searchAgentSkills>[number]) {
   if (!mention.value || composerLocked.value)
+    return
+  const locked = props.lockedSkillIds || []
+  if (locked.length && !locked.includes(skill.id))
     return
   const { start, end } = mention.value
   const text = `${composerText.value.slice(0, start)}${composerText.value.slice(end)}`
@@ -829,7 +888,7 @@ function setActiveAgent(value: unknown) {
     </div>
 
     <div
-      v-if="!composerOnly"
+      v-if="!composerOnly && !hideAgentChrome"
       class="flex items-center justify-between gap-2 border-b border-border px-4 py-3"
     >
       <div class="flex min-w-0 flex-1 items-center gap-1">
@@ -915,6 +974,7 @@ function setActiveAgent(value: unknown) {
           :key="message.id"
           :message="message"
           :images="thumbsFor(message)"
+          :omit-skill-ids="lockedSkillIds"
         >
           <template v-if="message.confirmation || message.choice" #default>
             <AgentLabConfirmCard
@@ -1152,7 +1212,7 @@ function setActiveAgent(value: unknown) {
           </div>
         </Teleport>
         <div v-if="selectedModels.length || selectedSkills.length" class="flex w-full flex-wrap gap-1.5 px-3 pt-3">
-          <AgentLabSkillBadge v-for="skill in selectedSkills" :key="skill.id" :skill="skill" removable :disabled="composerLocked" @remove="removeSkill(skill.id)" />
+          <AgentLabSkillBadge v-for="skill in selectedSkills" :key="skill.id" :skill="skill" :removable="!isSkillLocked(skill.id)" :disabled="composerLocked" @remove="removeSkill(skill.id)" />
           <AgentLabModelBadge v-for="model in selectedModels" :key="model.id" :model="model" removable :disabled="composerLocked" @remove="removeModel(model.id)" />
         </div>
         <InputGroupTextarea

@@ -8,6 +8,7 @@ import { readModelMentions } from '~~/shared/utils/agentModels'
 import { readSkillCommands } from '~~/shared/utils/agentSkills'
 import { readErrorMessage } from '~~/shared/utils/apiError'
 import { SKETCH_TO_IMAGE_TOOL } from '~~/shared/utils/sketchToImage'
+import { draftHasSkillCreator, stripSkillCreatorCommand, useSkillCreatorLaunch } from '~/composables/useSkillCreatorLaunch'
 
 const props = withDefaults(defineProps<{
   compact?: boolean
@@ -20,6 +21,7 @@ const props = withDefaults(defineProps<{
 })
 const { projects, selectedProjectId, createProject } = useProjects()
 const { enterSelectedProject, resolveTargetProjectId } = useAgentWorkspaceNav()
+const { createDraftAndOpenEditor, priming: primingSkillCreator } = useSkillCreatorLaunch()
 const { sessionId: agentSessionId, messages, images, allImages, status, waitingForUserConfirm, waitingForUserChoice, pending, draft, attachments, attaching, error, sendMessage, stopAgent, stopping, attachFiles, attachUrls, removeAttachment, resolveConfirmation, resolveChoice, qualityPreference, confirmPolicy, agents, activeAgentId, canCreateAgent, canSwitchAgent, createAgent, selectAgent, queueNotice, ensureHydrated, flush } = useAgentLab({ projectId: selectedProjectId })
 const hasSketch = computed(() =>
   readModelMentions(draft.value, true).includes(SKETCH_TO_IMAGE_TOOL)
@@ -169,11 +171,27 @@ async function onSend() {
     await openSketchInProject()
     return false
   }
+  // Homepage /skill-creator must create a Skills draft + skill project,
+  // not a normal studio project (back link would go to Projects).
+  if (draftHasSkillCreator(draft.value)) {
+    if (primingSkillCreator.value)
+      return false
+    const userPrompt = stripSkillCreatorCommand(draft.value)
+    const opened = await createDraftAndOpenEditor({
+      userPrompt,
+      autosend: Boolean(userPrompt),
+      placeholder: userPrompt ? undefined : 'Describe the skill you want to create…',
+    })
+    if (opened)
+      draft.value = ''
+    return Boolean(opened)
+  }
   await resolveTargetProjectId()
   await nextTick()
   const sent = await sendMessage({ newAgent: props.newAgentOnSend })
   if (sent)
     await enterSelectedProject()
+  return sent
 }
 async function onConfirm(params: ConfirmationPayload['params']) {
   void resolveConfirmation('confirm', params)

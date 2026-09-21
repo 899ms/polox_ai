@@ -19,7 +19,47 @@ export type { AgentConfirmPolicy, AgentQuality }
 export type AgentStatus = 'idle' | 'thinking' | 'calling_tool' | 'generating' | 'queued'
 export type VideoFamily = 'seedance-2' | 'seedance-2-5' | 'wan-3'
 export type UncertainField = 'prompt' | 'aspect_ratio' | 'resolution' | 'duration'
-export type AgentImageKind = 'still' | 'cutout' | 'upload' | 'video'
+export type AgentImageKind = 'still' | 'cutout' | 'upload' | 'video' | 'audio'
+
+const AGENT_VIDEO_TYPES = new Set([
+  'video/mp4',
+  'video/quicktime',
+  'video/x-matroska',
+  'video/webm',
+])
+const AGENT_VIDEO_EXT = /\.(mp4|mov|mkv|webm)$/i
+const AGENT_AUDIO_TYPES = new Set([
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/wave',
+  'audio/aac',
+  'audio/ogg',
+  'audio/mp4',
+])
+const AGENT_AUDIO_EXT = /\.(mp3|wav|aac|ogg|m4a)$/i
+
+
+function isAgentImageFile(file: File) {
+  const type = file.type.toLowerCase()
+  return type === 'image/jpeg' || type === 'image/jpg' || type === 'image/png' || type === 'image/webp' || type === 'image/gif'
+}
+
+function isAgentVideoFile(file: File) {
+  const type = file.type.toLowerCase()
+  if (AGENT_VIDEO_TYPES.has(type))
+    return true
+  return !type && AGENT_VIDEO_EXT.test(file.name)
+}
+
+function isAgentAudioFile(file: File) {
+  const type = file.type.toLowerCase()
+  if (AGENT_AUDIO_TYPES.has(type))
+    return true
+  return !type && AGENT_AUDIO_EXT.test(file.name)
+}
+
 export type ConfirmationKind = 'image' | 'video' | 'cutout' | 'mixed'
 export interface AgentImage {
   modelId?: string
@@ -49,6 +89,7 @@ export interface PendingAttachment {
   status: 'uploading' | 'ready' | 'fail'
   error: string
   imageId?: string
+  kind?: 'image' | 'audio' | 'video'
 }
 export interface ConfirmationPayload {
   jobs?: Array<{
@@ -148,6 +189,8 @@ interface AgentEvent {
   message?: string
   limit?: number
   active?: number
+  path?: string
+  reason?: string
 }
 export interface AgentListItem {
   id: string
@@ -1607,6 +1650,34 @@ function createAgentLab(options?: {
         }
       }
     }
+    if (event.type === 'navigate' && event.path) {
+      const target = String(event.path || '').trim()
+      if (target.startsWith('/')) {
+        const reason = String((event as { reason?: string }).reason || '').trim()
+        if (reason === 'test_now' && import.meta.client) {
+          try {
+            sessionStorage.setItem('polox-force-skill-mode', 'test')
+          }
+          catch {
+            // Ignore private-mode failures.
+          }
+        }
+        try {
+          const url = new URL(target, 'http://local.invalid')
+          const query = Object.fromEntries(url.searchParams.entries()) as Record<string, string>
+          if (reason === 'test_now') {
+            query.mode = query.mode || 'agent'
+            query.skillMode = 'test'
+            // Ensure the route actually changes when already on this project page.
+            query.skillSwitch = String(Date.now())
+          }
+          void navigateTo({ path: url.pathname, query }, { replace: Boolean(reason === 'test_now' || reason === 'save_and_exit') })
+        }
+        catch {
+          void navigateTo(target)
+        }
+      }
+    }
     if (event.type === 'done') {
       const last = state.messages[state.messages.length - 1]
       if (last?.streaming)
@@ -1758,20 +1829,21 @@ function createAgentLab(options?: {
   function attachUrls(items: Array<{
     url: string
     name?: string
+    kind?: 'image' | 'audio' | 'video'
   }>) {
     const next = items.filter((item) => {
       const url = String(item.url || '').trim()
       return /^https?:\/\//i.test(url) && !url.toLowerCase().startsWith('blob:')
     })
     if (!next.length) {
-      setLabError('Only generated stills can be attached')
+      setLabError('Only project media can be attached')
       return
     }
     const unique = next.filter(item => !attachments.value.some(existing => existing.url === item.url))
     if (!unique.length)
       return
     if (attachments.value.length + unique.length > 9) {
-      setLabError('Up to 9 images per message')
+      setLabError('Up to 9 attachments per message')
       return
     }
     clearLabError()
@@ -1827,32 +1899,37 @@ function createAgentLab(options?: {
   }
 
   async function attachFiles(fileList: File[]) {
-    const accepted = fileList.filter((file) => {
-      const type = file.type.toLowerCase()
-      return type === 'image/jpeg' || type === 'image/png' || type === 'image/webp' || type === 'image/gif'
-    })
+    const accepted = fileList.filter(file => isAgentImageFile(file) || isAgentAudioFile(file) || isAgentVideoFile(file))
     if (!accepted.length) {
-      setLabError('Upload JPEG, PNG, WEBP, or GIF')
+      setLabError('Upload JPEG, PNG, WEBP, GIF, MP4/MOV/WEBM video, or MP3/WAV/AAC/OGG/M4A')
       return
     }
     if (attachments.value.length + accepted.length > 9) {
-      setLabError('Up to 9 images per message')
+      setLabError('Up to 9 attachments per message')
       return
     }
     clearLabError()
     const id = await ensureSession()
     for (const file of accepted) {
-      if (file.size > 10 * 1024 * 1024) {
-        setLabError('Each image must be 10MB or smaller')
+      const audio = isAgentAudioFile(file)
+      const video = !audio && isAgentVideoFile(file)
+      const maxBytes = audio ? 15 * 1024 * 1024 : video ? 200 * 1024 * 1024 : 10 * 1024 * 1024
+      if (file.size > maxBytes) {
+        setLabError(audio
+          ? 'Each audio file must be 15MB or smaller'
+          : video
+            ? 'Each video must be 200MB or smaller'
+            : 'Each image must be 10MB or smaller')
         continue
       }
       const local: PendingAttachment = {
         id: crypto.randomUUID(),
         name: file.name,
-        previewUrl: URL.createObjectURL(file),
+        previewUrl: audio ? '' : URL.createObjectURL(file),
         url: '',
         status: 'uploading',
         error: '',
+        kind: audio ? 'audio' : video ? 'video' : 'image',
       }
       attachments.value = [...attachments.value, local]
       try {
@@ -1895,7 +1972,184 @@ function createAgentLab(options?: {
       }
     }
   }
-  async function sendMessage(options?: { newAgent?: boolean, sketchFile?: File }): Promise<boolean> {
+  /** Transcript-only: Skill Creator markers, ignoring the current title. */
+    function agentTranscriptLooksLikeSkillEdit(agent: StoredAgent) {
+      const messages = agent.messages || []
+      return messages.some((item) => {
+        const content = String(item.content || '')
+        return /(?:^|\s)\/skill-creator(?=\s|$)/.test(content)
+          || content.includes('INTERNAL_EDIT_CONTEXT')
+          || content.includes('exit_skill_creator')
+          || content.includes('save_user_skill')
+      })
+    }
+
+
+    function agentLooksLikeSkillEdit(agent: StoredAgent) {
+      // Title alone is not enough — auto-titles and swapped titles lied to us before.
+      return agentTranscriptLooksLikeSkillEdit(agent)
+    }
+
+
+    function richestSkillCreatorAgent(excludeIds: string[] = []) {
+      const skip = new Set(excludeIds)
+      return [...storedAgents.value]
+        .filter(agent => !skip.has(agent.id) && agentTranscriptLooksLikeSkillEdit(agent))
+        .sort((a, b) => ((b.messages || []).length - (a.messages || []).length) || ((b.updatedAt || 0) - (a.updatedAt || 0)))[0]
+    }
+
+  /** Force Skill Creator transcripts onto Edit, and keep Test free of creator history. */
+    function reconcileSkillWorkspaceAgents() {
+      const lock = (id: string, title: 'Edit' | 'Test') => {
+        const list = storedAgents.value.slice()
+        const idx = list.findIndex(agent => agent.id === id)
+        if (idx < 0)
+          return
+        const row = list[idx]!
+        if (row.title === title && row.titleSource === 'manual')
+          return
+        list[idx] = { ...row, title, titleSource: 'manual', updatedAt: Date.now() }
+        storedAgents.value = list
+        if (activeAgentId.value === id) {
+          agentTitle.value = title
+          titleSource.value = 'manual'
+        }
+      }
+
+      const creator = richestSkillCreatorAgent()
+      if (creator) {
+        const titledEdit = storedAgents.value.find(agent => String(agent.title || '').trim() === 'Edit')
+        // Demote a wrongly titled Edit that is not the creator transcript.
+        if (titledEdit && titledEdit.id !== creator.id && !agentTranscriptLooksLikeSkillEdit(titledEdit)) {
+          const hasOtherTest = storedAgents.value.some(agent =>
+            agent.id !== titledEdit.id && String(agent.title || '').trim() === 'Test',
+          )
+          lock(titledEdit.id, hasOtherTest ? 'Test' : 'Test')
+        }
+        lock(creator.id, 'Edit')
+      }
+
+      // If something titled Test still holds Skill Creator history, strip that title so
+      // ensureNamedAgent('Test') can mint a clean Test agent.
+      for (const agent of storedAgents.value) {
+        if (String(agent.title || '').trim() !== 'Test')
+          continue
+        if (!agentTranscriptLooksLikeSkillEdit(agent))
+          continue
+        // Creator path above should have renamed it Edit; if another Edit exists, retitle this away.
+        if (String(richestSkillCreatorAgent()?.id || '') === agent.id)
+          lock(agent.id, 'Edit')
+        else
+          lock(agent.id, 'Edit')
+      }
+      writeStore()
+    }
+
+  /** Find or create a named agent (Edit vs Test) so skill modes keep separate chat history. */
+    function ensureNamedAgent(title: string) {
+      reconcileSkillWorkspaceAgents()
+      const wanted = String(title || '').trim() || DEFAULT_AGENT_TITLE
+      const lockTitle = (id: string) => {
+        const list = storedAgents.value.slice()
+        const idx = list.findIndex(agent => agent.id === id)
+        if (idx < 0)
+          return id
+        const row = list[idx]!
+        if (row.title === wanted && row.titleSource === 'manual')
+          return id
+        list[idx] = { ...row, title: wanted, titleSource: 'manual', updatedAt: Date.now() }
+        storedAgents.value = list
+        if (activeAgentId.value === id) {
+          agentTitle.value = wanted
+          titleSource.value = 'manual'
+        }
+        writeStore()
+        return id
+      }
+
+      if (wanted === 'Edit') {
+        const creator = richestSkillCreatorAgent()
+        if (creator)
+          return lockTitle(creator.id)
+        const byTitle = storedAgents.value.find(agent => String(agent.title || '').trim() === 'Edit')
+        if (byTitle)
+          return lockTitle(byTitle.id)
+        commitCurrentAgent()
+        void persistChat()
+        const next = emptyStoredAgent('Edit')
+        next.titleSource = 'manual'
+        storedAgents.value = [...storedAgents.value, next]
+        writeStore()
+        return next.id
+      }
+
+      if (wanted === 'Test') {
+        // Never reuse a Skill Creator transcript as Test.
+        const byTitle = storedAgents.value.find(agent =>
+          String(agent.title || '').trim() === 'Test' && !agentTranscriptLooksLikeSkillEdit(agent),
+        )
+        if (byTitle)
+          return lockTitle(byTitle.id)
+        commitCurrentAgent()
+        void persistChat()
+        const next = emptyStoredAgent('Test')
+        next.titleSource = 'manual'
+        storedAgents.value = [...storedAgents.value, next]
+        writeStore()
+        return next.id
+      }
+
+      const byTitle = storedAgents.value.find(agent => String(agent.title || '').trim() === wanted)
+      if (byTitle)
+        return lockTitle(byTitle.id)
+
+      commitCurrentAgent()
+      void persistChat()
+      const next = emptyStoredAgent(wanted)
+      next.titleSource = 'manual'
+      storedAgents.value = [...storedAgents.value, next]
+      writeStore()
+      return next.id
+    }
+
+
+  function stripLockedSkillCommands(raw: string, ids: readonly string[]) {
+    let next = String(raw || '')
+    for (const id of ids) {
+      if (!id)
+        continue
+      next = next.replace(new RegExp(`(?:^|\s)/${id}(?=\s|$)`, 'g'), ' ')
+    }
+    return next.replace(/\s+/g, ' ').trim()
+  }
+
+
+  function historyHasSkillCommand(id: string) {
+    if (!id)
+      return false
+    const re = new RegExp(`(?:^|\s)/${id}(?=\s|$)`)
+    return messages.value.some(item => item.role === 'user' && re.test(item.content || ''))
+  }
+
+
+  function consumeEditSkillBrief(outboundText: string) {
+    if (!import.meta.client)
+      return ''
+    if (!/(?:^|\s)\/skill-creator(?=\s|$)/.test(outboundText))
+      return ''
+    try {
+      const brief = String(sessionStorage.getItem('polox-edit-skill-brief') || '').trim()
+      if (!brief)
+        return ''
+      sessionStorage.removeItem('polox-edit-skill-brief')
+      return brief
+    }
+    catch {
+      return ''
+    }
+  }
+
+  async function sendMessage(options?: { newAgent?: boolean, sketchFile?: File, lockedSkillIds?: string[] }): Promise<boolean> {
     if (options?.sketchFile) {
       if (pending.value || waitingForUser.value || attaching.value || status.value === 'generating' || status.value === 'queued')
         return false
@@ -1930,9 +2184,19 @@ function createAgentLab(options?: {
       }
     }
     const text = draft.value.trim()
+    const editBrief = consumeEditSkillBrief(text)
+    const lockedIds = [...new Set((options?.lockedSkillIds || []).map(id => String(id || '').trim()).filter(Boolean))]
+    // Locked Test/Edit skills: composer keeps the chip; only prime `/id` once per chat so later
+    // turns do not resend the trigger (and burn tokens) on every message.
+    const primeIds = lockedIds.filter(id => !historyHasSkillCommand(id))
+    const bodyWithoutLocked = lockedIds.length ? stripLockedSkillCommands(text, lockedIds) : text
+    const primedBody = primeIds.length
+      ? [primeIds.map(id => `/${id}`).join(' '), bodyWithoutLocked].filter(Boolean).join(' ').trim()
+      : bodyWithoutLocked
+    const outbound = editBrief ? `${editBrief}\n\n${primedBody}` : primedBody
     const ready = readyAttachments.value
     if (options?.newAgent) {
-      if ((!text && !ready.length) || attaching.value || attachments.value.some(item => item.status === 'fail')) {
+      if ((!outbound && !ready.length) || attaching.value || attachments.value.some(item => item.status === 'fail')) {
         return false
       }
       if (!canCreateAgent.value) {
@@ -1966,7 +2230,7 @@ function createAgentLab(options?: {
       setLabError('Confirm or cancel the pending generation first')
       return false
     }
-    if ((!text && !ready.length) || pending.value || waitingForUser.value || attaching.value || status.value === 'generating' || status.value === 'queued') {
+    if ((!outbound && !ready.length) || pending.value || waitingForUser.value || attaching.value || status.value === 'generating' || status.value === 'queued') {
       return false
     }
     if (attachments.value.some(item => item.status === 'fail'))
@@ -1981,7 +2245,7 @@ function createAgentLab(options?: {
     messages.value.push({
       id: crypto.randomUUID(),
       role: 'user',
-      content: text,
+      content: outbound,
       imageIds,
     })
     pending.value = true
@@ -1990,7 +2254,7 @@ function createAgentLab(options?: {
     const epoch = streamEpoch
     const runAgentId = activeAgentId.value
     writeStore()
-    void runAgentTurn(epoch, runAgentId, text, urls)
+    void runAgentTurn(epoch, runAgentId, outbound, urls)
     return true
   }
   async function stopAgent() {
@@ -2761,8 +3025,10 @@ function createAgentLab(options?: {
     hydrating = false
     writeStore()
   }
-  async function selectAgent(id: string) {
-    if (!id || id === activeAgentId.value || !canSwitchAgent.value)
+  async function selectAgent(id: string, options?: { force?: boolean }) {
+    if (!id || id === activeAgentId.value)
+      return
+    if (!options?.force && !canSwitchAgent.value)
       return
     commitCurrentAgent()
     await persistChat()
@@ -2934,6 +3200,7 @@ function createAgentLab(options?: {
     canSwitchAgent,
     createAgent,
     selectAgent,
+    ensureNamedAgent,
     sendMessage,
     stopAgent,
     stopping,

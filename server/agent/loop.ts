@@ -25,12 +25,16 @@ import { MAX_STEPS } from './policy'
 import { applyImageQuality, applyVideoQuality, clampVideoToFamily, parseAgentConfirmPolicy, parseAgentQuality, parseVideoFamily } from './quality'
 import { restoreSessionContext } from './restore'
 import { scheduleSessionResume } from './resume'
+import { isBuiltinSkillId, isValidSkillId, loadSkillDocument, parseSkillSlashIds } from './skills'
+import { getUserSkillByProjectId, getUserSkillRecord, isSkillIdTaken, isSkillNameTaken, listUserSkillRecords, persistUserSkill, publishAndEnableUserSkill } from '../utils/userSkills'
+import { bindSkillProject, ensureSkillProject, resolveProject } from '../utils/projects'
 import { choiceAlreadyAnswered, confirmationAlreadyStarted, persistNow, refreshSessionPrompt, requireLoadedSession, requireSession, resolveChatSession, touch, upsertImage } from './session'
 import { assertSketchQuestion, sketchBrief, sketchGenerationSubmitted, validateSketchReferences } from './sketchBrief'
 import { acquireGenerationSlot, bindGenerationSlot, completeGenerationSlot, waitForGenerationSlot } from './slots'
 import { summarizeSessionTitle } from './title'
-import { ASK_USER_TOOL, CONCAT_VIDEO_TOOL, GENERATE_IMAGE_TOOL, GENERATE_VIDEO_TOOL, openAiTools, parseAskUserArgs, parseConcatVideoArgs, parseGenerateImageArgs, parseGenerateVideoArgs, parseRemoveBackgroundArgs, REMOVE_BACKGROUND_TOOL, resolveConcatVideoUrls, resolveGenerateImageArgs, resolveGenerateVideoArgs, resolveRemoveBackgroundSource } from './tools'
-import { uploadAgentImage } from './upload'
+import { ASK_USER_TOOL, CHECK_SKILL_ID_TOOL, CONCAT_VIDEO_TOOL, EXIT_SKILL_CREATOR_TOOL, GENERATE_IMAGE_TOOL, GENERATE_VIDEO_TOOL, LOAD_SKILL_TOOL, openAiTools, SAVE_USER_SKILL_TOOL, parseAskUserArgs, parseCheckSkillIdArgs, parseConcatVideoArgs, parseExitSkillCreatorArgs, parseGenerateImageArgs, parseGenerateVideoArgs, parseRemoveBackgroundArgs, REMOVE_BACKGROUND_TOOL, resolveConcatVideoUrls, resolveGenerateImageArgs, resolveGenerateVideoArgs, resolveRemoveBackgroundSource } from './tools'
+import { isMediaAudioUrl, isMediaVideoUrl } from '~~/shared/utils/seedance25'
+import { agentMediaKindForMime, uploadAgentImage, uploadAgentMedia } from './upload'
 import { inspectWebsite } from './websiteInspection'
 
 type Emit = (event: AgentEvent) => void
@@ -1033,6 +1037,25 @@ async function dispatchToolCalls(sessionId: string, toolCalls: ToolCall[], emit:
     args: AskUserArgs
   } | {
     call: ToolCall
+    kind: 'load_skill'
+    id: string
+  } | {
+    call: ToolCall
+    kind: 'check_skill_id'
+    id?: string
+    name?: string
+    exceptSkillId?: string
+  } | {
+    call: ToolCall
+    kind: 'exit_skill_creator'
+    action: 'save_and_exit' | 'test_now'
+  } | {
+    call: ToolCall
+    kind: 'save_user_skill'
+    markdown: string
+    enabled?: boolean
+  } | {
+    call: ToolCall
     kind: 'error'
     result: string
   }
@@ -1105,6 +1128,28 @@ async function dispatchToolCalls(sessionId: string, toolCalls: ToolCall[], emit:
       }
       if (call.function.name === EXPORT_ZIP_TOOL)
         return { call, kind: 'zip', input: resolveZipExport(call.function.arguments, session.images) }
+      if (call.function.name === EXIT_SKILL_CREATOR_TOOL) {
+        const parsed = parseExitSkillCreatorArgs(call.function.arguments)
+        return { call, kind: 'exit_skill_creator', action: parsed.action }
+      }
+      if (call.function.name === CHECK_SKILL_ID_TOOL) {
+        const parsed = parseCheckSkillIdArgs(call.function.arguments)
+        return {
+          call,
+          kind: 'check_skill_id',
+          id: parsed.id,
+          name: parsed.name,
+          exceptSkillId: parsed.exceptSkillId,
+        }
+      }
+      if (call.function.name === LOAD_SKILL_TOOL) {
+        const id = String(JSON.parse(call.function.arguments || '{}').id || '').trim()
+        return { call, kind: 'load_skill', id }
+      }
+      if (call.function.name === SAVE_USER_SKILL_TOOL) {
+        const parsed = JSON.parse(call.function.arguments || '{}') as { markdown?: string, enabled?: boolean }
+        return { call, kind: 'save_user_skill', markdown: String(parsed.markdown || ''), enabled: parsed.enabled }
+      }
       if (call.function.name === CONCAT_VIDEO_TOOL) {
         const args = parseConcatVideoArgs(call.function.arguments)
         return { call, kind: 'concat', urls: resolveConcatVideoUrls(args, session.images) }
@@ -1137,7 +1182,7 @@ async function dispatchToolCalls(sessionId: string, toolCalls: ToolCall[], emit:
     kind: 'ask'
   }> => item.kind === 'ask')
   const generation = prepared.filter((item): item is Exclude<Prepared, {
-    kind: 'error' | 'concat' | 'ask' | 'zip'
+    kind: 'error' | 'concat' | 'ask' | 'zip' | 'load_skill' | 'save_user_skill' | 'check_skill_id' | 'exit_skill_creator'
   }> => item.kind === 'image' || item.kind === 'remove' || item.kind === 'video' || item.kind === 'model')
   if (asks.length) {
     const blocked = [
@@ -1171,6 +1216,191 @@ async function dispatchToolCalls(sessionId: string, toolCalls: ToolCall[], emit:
     })), emit)
     return true
   }
+
+  const skillExits = prepared.filter((item): item is Extract<Prepared, { kind: 'exit_skill_creator' }> => item.kind === 'exit_skill_creator')
+  for (const item of skillExits) {
+    emit({ type: 'tool', name: EXIT_SKILL_CREATOR_TOOL, status: 'start', callId: item.call.id })
+    try {
+      const creatorLoaded = (session.loadedSkillIds || []).includes('skill-creator')
+      if (!creatorLoaded) {
+        appendToolResult(sessionId, item.call.id, JSON.stringify({
+          ok: false,
+          error: 'exit_skill_creator is only available while /skill-creator is loaded.',
+        }))
+        continue
+      }
+
+      // Force Enable (published + enabled) — exiting Skill Creator cannot leave a draft.
+      let projectId = String(session.projectId || '').trim()
+      let row = projectId ? await getUserSkillByProjectId(projectId) : null
+      if (!row && projectId) {
+        const project = await resolveProject(projectId)
+        const boundId = String((project as { skillId?: string } | null)?.skillId || '').trim()
+        if (boundId)
+          row = await getUserSkillRecord(boundId)
+      }
+      if (!row) {
+        const latest = await listUserSkillRecords()
+        row = latest[0] || null
+      }
+      if (!row) {
+        appendToolResult(sessionId, item.call.id, JSON.stringify({
+          ok: false,
+          error: 'No skill bound to this session. Save with save_user_skill first.',
+        }))
+        continue
+      }
+
+      row = await publishAndEnableUserSkill(row.skillId) || row
+      projectId = String(row.projectId || projectId || '').trim()
+      if (projectId) {
+        try {
+          const bound = await bindSkillProject(row.skillId, projectId, row.name)
+          projectId = String((bound as { _id?: string })?._id || projectId || '').trim()
+          if (projectId && row.projectId !== projectId) {
+            row.projectId = projectId
+            row.updatedAt = new Date()
+            await row.save()
+          }
+        }
+        catch (bindError) {
+          console.error('[agent] bindSkillProject failed', bindError)
+        }
+      }
+
+      const path = item.action === 'test_now' && projectId
+        ? `/projects/${projectId}?mode=agent&skillMode=test`
+        : '/skills'
+
+      emit({
+        type: 'navigate',
+        path,
+        reason: item.action,
+      })
+      appendToolResult(sessionId, item.call.id, JSON.stringify({
+        ok: true,
+        action: item.action,
+        path,
+        skillId: row.skillId,
+        enabled: true,
+        status: 'published',
+        notice: item.action === 'test_now'
+          ? 'Skill enabled. Opening Test mode.'
+          : 'Skill enabled. Returning to Skills.',
+      }))
+    }
+    finally {
+      emit({ type: 'tool', name: EXIT_SKILL_CREATOR_TOOL, status: 'end', callId: item.call.id })
+    }
+  }
+
+  const skillChecks = prepared.filter((item): item is Extract<Prepared, { kind: 'check_skill_id' }> => item.kind === 'check_skill_id')
+  for (const item of skillChecks) {
+    emit({ type: 'tool', name: CHECK_SKILL_ID_TOOL, status: 'start', callId: item.call.id })
+    try {
+      if (!item.id && !item.name) {
+        appendToolResult(sessionId, item.call.id, JSON.stringify({ ok: false, error: 'Pass id and/or name to check.' }))
+        continue
+      }
+      const out: Record<string, unknown> = { ok: true }
+      if (item.id) {
+        if (!isValidSkillId(item.id))
+          out.id = { ok: false, reason: 'Skill id must be English kebab-case (a-z, 0-9, hyphens), 2–64 chars.' }
+        else if (isBuiltinSkillId(item.id))
+          out.id = { ok: false, reason: 'Reserved builtin id.' }
+        else if (item.exceptSkillId && item.exceptSkillId === item.id)
+          out.id = { ok: true }
+        else if (await isSkillIdTaken(item.id, item.exceptSkillId))
+          out.id = { ok: false, reason: 'Skill id already taken.' }
+        else
+          out.id = { ok: true }
+      }
+      if (item.name) {
+        if (await isSkillNameTaken(item.name, item.exceptSkillId))
+          out.name = { ok: false, reason: 'Skill name already taken (case-insensitive).' }
+        else
+          out.name = { ok: true }
+      }
+      const idOk = !item.id || (out.id as { ok?: boolean })?.ok
+      const nameOk = !item.name || (out.name as { ok?: boolean })?.ok
+      out.ok = Boolean(idOk && nameOk)
+      out.notice = out.ok
+        ? 'Available. Safe to propose or save with these values.'
+        : 'Taken or invalid. Do not offer these options; propose alternatives and re-check. If the user typed Other/custom, tell them it is taken and ask again.'
+      appendToolResult(sessionId, item.call.id, JSON.stringify(out))
+    }
+    finally {
+      emit({ type: 'tool', name: CHECK_SKILL_ID_TOOL, status: 'end', callId: item.call.id })
+    }
+  }
+
+  const skillLoads = prepared.filter((item): item is Extract<Prepared, { kind: 'load_skill' }> => item.kind === 'load_skill')
+  const skillSaves = prepared.filter((item): item is Extract<Prepared, { kind: 'save_user_skill' }> => item.kind === 'save_user_skill')
+  for (const item of skillLoads) {
+    const doc = loadSkillDocument(item.id, true)
+    if (!doc) {
+      appendToolResult(sessionId, item.call.id, JSON.stringify({ ok: false, error: `Unknown skill: ${item.id}` }))
+      continue
+    }
+    session.loadedSkillIds = [...new Set([...(session.loadedSkillIds || []), doc.id])]
+    await refreshSessionPrompt(session)
+    appendToolResult(sessionId, item.call.id, JSON.stringify({
+      ok: true,
+      id: doc.id,
+      name: doc.frontmatter.name,
+      description: doc.frontmatter.description,
+      triggers: doc.frontmatter.triggers,
+      requires: doc.frontmatter.requires,
+      body: doc.body,
+      notice: 'Skill body loaded into the system prompt for this session. Follow it. Generation tools still require confirmation.',
+    }))
+  }
+  for (const item of skillSaves) {
+    emit({ type: 'tool', name: SAVE_USER_SKILL_TOOL, status: 'start', callId: item.call.id })
+    try {
+      const creatorLoaded = (session.loadedSkillIds || []).includes('skill-creator')
+      if (!creatorLoaded) {
+        appendToolResult(sessionId, item.call.id, JSON.stringify({
+          ok: false,
+          error: 'save_user_skill is only available while /skill-creator is loaded. Call load_skill({ id: "skill-creator" }) first, or open Create Skill / Edit from Skills.',
+        }))
+        continue
+      }
+      const result = await persistUserSkill({
+        markdown: item.markdown,
+        enabled: item.enabled,
+        source: 'user',
+        projectId: session.projectId,
+      })
+      if (!result.ok) {
+        appendToolResult(sessionId, item.call.id, JSON.stringify({ ok: false, error: 'Validation failed', issues: result.issues }))
+        continue
+      }
+      // Keep Edit chat on the same skill project when the id/name changes (untitled → final id).
+      if (session.projectId) {
+        try {
+          await bindSkillProject(result.skill.skillId, session.projectId, result.skill.name)
+        }
+        catch (bindError) {
+          console.error('[agent] bindSkillProject failed', bindError)
+        }
+      }
+      appendToolResult(sessionId, item.call.id, JSON.stringify({
+        ok: true,
+        created: result.created,
+        id: result.skill.skillId,
+        enabled: result.skill.enabled,
+        name: result.skill.name,
+        notice: result.skill.enabled
+          ? 'Skill saved and enabled. It appears in the / picker. Prefer /' + result.skill.skillId + ' to run it.'
+          : 'Skill saved but disabled. Enable it from Skills before it appears in the catalog.',
+      }))
+    }
+    finally {
+      emit({ type: 'tool', name: SAVE_USER_SKILL_TOOL, status: 'end', callId: item.call.id })
+    }
+  }
+
   for (const item of exports) {
     if (sessionWantsStop(session) || signal?.aborted) {
       appendToolResult(sessionId, item.call.id, JSON.stringify({ ok: false, cancelled: true, error: 'Stopped by user' }))
@@ -1268,7 +1498,7 @@ export async function runAgentLoop(sessionId: string, emit: Emit, signal?: Abort
         noteAgentStopped(session, emit)
         return
       }
-      refreshSessionPrompt(session)
+      await refreshSessionPrompt(session)
       const hasLayerImage = hasLayerSourceImage(session.messages, session.images)
       const missingLayerImage = !hasLayerImage && (selectedModelIds(session).some(isLayerSplitterModelId) || isLayerSplitterRequest(session.messages) || layerSplitNeedsPlan(session.messages) || layerSplitNeedsConfirm(session.messages) || needsLayerDescriptionCard(session.messages))
       const sketch = sketchBrief(session.messages)
@@ -1444,14 +1674,48 @@ function parseAttachmentUrls(value: unknown) {
     throw new Error('A maximum of 16 attached images is allowed')
   return urls
 }
-function userMessageContent(text: string, attachments: string[]): string | UserContentPart[] {
+function isLikelyAudioUrl(url: string, images: AgentImage[]) {
+  const hit = images.find(item => item.url === url)
+  if (hit?.kind === 'audio')
+    return true
+  return isMediaAudioUrl(url) || /\.(mp3|wav|aac|ogg|m4a)(\?|$)/i.test(url)
+}
+
+function isLikelyVideoUrl(url: string, images: AgentImage[]) {
+  const hit = images.find(item => item.url === url)
+  if (hit?.kind === 'video')
+    return true
+  return isMediaVideoUrl(url) || /\.(?:mp4|mov|webm|m4v|mkv)(\?|$)/i.test(url)
+}
+
+function userMessageContent(text: string, attachments: string[], images: AgentImage[] = []): string | UserContentPart[] {
   if (!attachments.length)
     return text
-  const body = text || 'Use the attached still(s).'
-  const listed = `${body}\n\nAttached stills:\n${attachments.map((url, index) => `${index + 1}. ${url}`).join('\n')}\nUse these URLs as generate_image input_urls, generate_video first_frame (one still), or generate_video reference_images (several stills).`
+  const audios = attachments.filter(url => isLikelyAudioUrl(url, images))
+  const videos = attachments.filter(url => !isLikelyAudioUrl(url, images) && isLikelyVideoUrl(url, images))
+  const stills = attachments.filter(url => !isLikelyAudioUrl(url, images) && !isLikelyVideoUrl(url, images))
+  const body = text
+    || (videos.length && !stills.length && !audios.length
+      ? 'Use the attached video reference(s).'
+      : audios.length && !stills.length && !videos.length
+        ? 'Use the attached voice reference(s).'
+        : 'Use the attached media.')
+  const parts: string[] = [body]
+  if (stills.length) {
+    parts.push(`Attached stills:\n${stills.map((url, index) => `${index + 1}. ${url}`).join('\n')}\nUse these URLs as generate_image input_urls, generate_video first_frame (one still), or generate_video reference_images (several stills).`)
+  }
+  if (videos.length) {
+    parts.push(`Attached video references:\n${videos.map((url, index) => `${index + 1}. ${url}`).join('\n')}\nUse these URLs as generate_video reference_videos (reference-to-video / motion copy). Do not pass video URLs as image input_urls or first_frame.`)
+  }
+  if (audios.length) {
+    parts.push(`Attached voice references:\n${audios.map((url, index) => `${index + 1}. ${url}`).join('\n')}\nUse these URLs as generate_video reference_audios (voice / narration). Do not pass audio URLs as image input_urls.`)
+  }
+  const listed = parts.join('\n\n')
+  // Only still images go as multimodal image_url parts. Videos/audio stay text URLs so the
+  // vision decoder never tries to decode mp4/mov as an image (BadRequestError).
   return [
     { type: 'text', text: listed },
-    ...attachments.map(url => ({ type: 'image_url' as const, image_url: { url } })),
+    ...stills.map(url => ({ type: 'image_url' as const, image_url: { url } })),
   ]
 }
 function emitSessionCatchUp(session: {
@@ -1506,7 +1770,21 @@ export async function handleChat(message: string, sessionId: string | undefined,
   if (options?.bffUrl)
     session.bffUrl = options.bffUrl
   await restoreSessionContext(session, options?.history, options?.images, text)
-  refreshSessionPrompt(session)
+  const slashSkills = parseSkillSlashIds(text)
+  const historySlash = session.messages.flatMap((message) => {
+    if (message.role !== 'user')
+      return [] as string[]
+    const content = typeof message.content === 'string'
+      ? message.content
+      : Array.isArray(message.content)
+        ? message.content.map(part => part.type === 'text' ? part.text : '').join('\n')
+        : ''
+    return parseSkillSlashIds(content)
+  })
+  const mergedSkills = [...new Set([...(session.loadedSkillIds || []), ...historySlash, ...slashSkills])]
+  if (mergedSkills.length)
+    session.loadedSkillIds = mergedSkills
+  await refreshSessionPrompt(session)
   emit({ type: 'session', sessionId: session.id })
   emitSessionCatchUp(session, emit)
   if (session.busy)
@@ -1521,7 +1799,7 @@ export async function handleChat(message: string, sessionId: string | undefined,
     throw new Error('Answer or skip the pending questions first')
   }
   session.busy = true
-  session.messages.push({ role: 'user', content: userMessageContent(text, urls) })
+  session.messages.push({ role: 'user', content: userMessageContent(text, urls, session.images) })
   touch(session)
   try {
     await runAgentLoop(session.id, emit, signal)
@@ -1817,7 +2095,7 @@ export async function handleChoice(sessionId: string, body: ChoiceBody, emit: Em
     const preference = modelPreferenceFromChoice(pending.payload, body)
     if (preference) {
       session.quality = preference
-      refreshSessionPrompt(session)
+      await refreshSessionPrompt(session)
     }
     for (const item of pending.items)
       appendToolResult(session.id, item.toolCallId, result)
@@ -1969,16 +2247,25 @@ export async function handleUpload(sessionId: string | undefined, file: {
   mime: string
 }) {
   const session = await resolveChatSession(sessionId)
-  const url = await uploadAgentImage(session.id, file)
+  const mediaKind = agentMediaKindForMime(file.mime)
+  if (!mediaKind)
+    throw new Error('Unsupported upload type. Use JPEG/PNG/WEBP/GIF images, MP4/MOV/WEBM video, or MP3/WAV/AAC/OGG/M4A audio.')
+  const uploaded = await uploadAgentMedia(session.id, file)
+  const isAudio = uploaded.kind === 'audio'
+  const isVideo = uploaded.kind === 'video'
   const image = {
     id: crypto.randomUUID(),
-    kind: 'upload' as const,
+    kind: (isAudio ? 'audio' : isVideo ? 'video' : 'upload') as const,
     status: 'success' as const,
     name: file.fileName.slice(0, 100),
-    prompt: file.fileName.slice(0, 100) || 'Uploaded still',
+    prompt: isAudio
+      ? (file.fileName.slice(0, 100) || 'Uploaded voice reference')
+      : isVideo
+        ? (file.fileName.slice(0, 100) || 'Uploaded video reference')
+        : (file.fileName.slice(0, 100) || 'Uploaded still'),
     aspectRatio: 'auto',
     resolution: '',
-    url,
+    url: uploaded.url,
     error: '',
   }
   upsertImage(session, image)

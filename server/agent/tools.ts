@@ -25,6 +25,10 @@ export const REMOVE_BACKGROUND_TOOL = 'remove_background'
 export const GENERATE_VIDEO_TOOL = 'generate_video'
 export const CONCAT_VIDEO_TOOL = 'concat_videos'
 export const ASK_USER_TOOL = 'ask_user'
+export const LOAD_SKILL_TOOL = 'load_skill'
+export const SAVE_USER_SKILL_TOOL = 'save_user_skill'
+export const CHECK_SKILL_ID_TOOL = 'check_skill_id'
+export const EXIT_SKILL_CREATOR_TOOL = 'exit_skill_creator'
 export const MAX_CONCAT_CLIPS = 20
 export const MAX_ASK_QUESTIONS = 6
 export const MAX_ASK_OPTIONS = 8
@@ -242,6 +246,73 @@ export const openAiTools = [
           },
         },
         required: ['questions'],
+      },
+    },
+  },
+
+  {
+    type: 'function',
+    function: {
+      name: LOAD_SKILL_TOOL,
+      description: 'Load the full body of a skill by id into context. Free and read-only. Use when the user types /skill-id or when a catalog summary is not enough. Does not spend money and does not require generation confirmation.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', description: 'Skill id, e.g. image-layer-splitter or a user skill id.' },
+        },
+        required: ['id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: SAVE_USER_SKILL_TOOL,
+      description: 'Validate and persist an L1 user skill from SKILL.md markdown after the user confirms the draft. Refuses builtin id overrides and unregistered tools. Imports should stay disabled until explicitly enabled. Free to call; does not generate media.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          markdown: { type: 'string', description: 'Full SKILL.md including YAML frontmatter and body.' },
+          enabled: { type: 'boolean', description: 'Whether the skill is enabled in the catalog after save. Default true for new user skills; false for imports.' },
+        },
+        required: ['markdown'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: CHECK_SKILL_ID_TOOL,
+      description: 'Check whether a skill id (/trigger) and/or display name are available. Free and read-only. Call before proposing or accepting a name/id, and again after the user picks Other/custom text. Pass exceptSkillId when renaming an existing skill so its current id/name stay allowed.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', description: 'English kebab-case skill id / trigger without the leading slash, e.g. youtube-banner-generator.' },
+          name: { type: 'string', description: 'Display name to check (any language). Compared case-insensitively.' },
+          except_skill_id: { type: 'string', description: 'Optional current skill id to exclude from the check (in-place rename/edit).' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: EXIT_SKILL_CREATOR_TOOL,
+      description: 'Finish Skill Creator after the final exit ask_user. ALWAYS Enables the bound skill (status published + enabled; cannot remain draft). action "save_and_exit": Enable then go to Skills. action "test_now": Enable then open Test mode. Say Enable in notices, never Publish. Prefer save_user_skill with enabled:true in the same turn when content changed. Free. Does not generate media.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['save_and_exit', 'test_now'],
+            description: 'save_and_exit → /skills after Enable; test_now → open Test mode after Enable.',
+          },
+        },
+        required: ['action'],
       },
     },
   },
@@ -570,6 +641,95 @@ function optionAllowsCustom(id: string, label: string, flag: unknown) {
   return CUSTOM_OPTION_RE.test(id) || CUSTOM_OPTION_RE.test(label)
 }
 
+/** User-facing copy must say Enable, never Publish (public listing is a separate future feature). */
+function rewritePublishWording(text: string) {
+  return text
+    .replace(/\bPublishing\b/g, 'Enabling')
+    .replace(/\bpublishing\b/g, 'enabling')
+    .replace(/\bPublished\b/g, 'Enabled')
+    .replace(/\bpublished\b/g, 'enabled')
+    .replace(/\bPublish\b/g, 'Enable')
+    .replace(/\bpublish\b/g, 'enable')
+}
+
+const EXIT_SKILL_CREATOR_COPY: Record<string, { label: string, description: string }> = {
+  save_and_exit: {
+    label: 'Enable & exit',
+    description: 'Enable the updated skill and return to Skills.',
+  },
+  test_now: {
+    label: 'Enable & test now',
+    description: 'Enable the updated skill and open Test mode so you can try it again.',
+  },
+}
+
+function normalizeExitSkillCreatorOptionId(id: string, label: string) {
+  const hay = `${id} ${label}`.toLowerCase()
+  if (/(test[_\s-]?now|enable.*test|publish.*test)/.test(hay))
+    return 'test_now'
+  if (/(save[_\s-]?and[_\s-]?exit|enable.*exit|publish.*exit)/.test(hay))
+    return 'save_and_exit'
+  return id
+}
+
+function sanitizeExitSkillCreatorQuestion(question: ChoiceQuestion): ChoiceQuestion {
+  const options = question.options.map((option) => {
+    const id = normalizeExitSkillCreatorOptionId(option.id, option.label)
+    const copy = EXIT_SKILL_CREATOR_COPY[id]
+    if (copy) {
+      return {
+        ...option,
+        id,
+        label: copy.label,
+        description: copy.description,
+        custom: false,
+      }
+    }
+    return {
+      ...option,
+      id,
+      label: rewritePublishWording(option.label),
+      ...(option.description ? { description: rewritePublishWording(option.description) } : {}),
+    }
+  })
+  return {
+    ...question,
+    prompt: rewritePublishWording(question.prompt) || 'Ready to save. How do you want to finish?',
+    ...(question.title ? { title: rewritePublishWording(question.title) } : {}),
+    options,
+  }
+}
+
+export function parseCheckSkillIdArgs(raw: string): { id?: string, name?: string, exceptSkillId?: string } {
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(raw || '{}') as Record<string, unknown>
+  }
+  catch {
+    throw new Error('check_skill_id arguments were not valid JSON')
+  }
+  const id = String(parsed.id || '').trim().toLowerCase()
+  const name = String(parsed.name || '').trim()
+  const exceptSkillId = String(parsed.except_skill_id || parsed.exceptSkillId || '').trim().toLowerCase()
+  return {
+    ...(id ? { id } : {}),
+    ...(name ? { name } : {}),
+    ...(exceptSkillId ? { exceptSkillId } : {}),
+  }
+}
+
+export function parseExitSkillCreatorArgs(raw: string): { action: 'save_and_exit' | 'test_now' } {
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(raw || '{}') as Record<string, unknown>
+  }
+  catch {
+    throw new Error('exit_skill_creator arguments were not valid JSON')
+  }
+  const action = parsed.action === 'test_now' ? 'test_now' as const : 'save_and_exit' as const
+  return { action }
+}
+
 function parseAskOption(raw: unknown, index: number, seen: Set<string>): ChoiceOption | null {
   if (!raw || typeof raw !== 'object')
     return null
@@ -663,7 +823,7 @@ function parseAskQuestion(raw: unknown, index: number, seen: Set<string>): Choic
   const recommendedRaw = clipAsk(row.recommended ?? row.recommended_id ?? row.recommendedId, 64)
   const recommendedId = options.some(item => item.id === recommendedRaw) ? recommendedRaw : undefined
   const displayPrompt = unique === 'layer_split_confirm' ? formatLayerSplitConfirmPrompt(prompt) : prompt
-  return {
+  const base: ChoiceQuestion = {
     id: unique,
     prompt: displayPrompt,
     options: SKETCH_QUESTIONS.includes(id)
@@ -672,6 +832,9 @@ function parseAskQuestion(raw: unknown, index: number, seen: Set<string>): Choic
     ...(title ? { title } : {}),
     ...(recommendedId ? { recommendedId } : {}),
   }
+  if (unique === 'exit_skill_creator')
+    return sanitizeExitSkillCreatorQuestion(base)
+  return base
 }
 
 export function parseAskUserArgs(raw: string): AskUserArgs {
@@ -700,8 +863,10 @@ export function parseAskUserArgs(raw: string): AskUserArgs {
   if (!questions.length)
     throw new Error('ask_user needs at least one question with options')
 
+  const hasExit = questions.some(question => question.id === 'exit_skill_creator')
+  const topPrompt = clipAsk(parsed.prompt ?? parsed.intro, 2000)
   return {
-    prompt: clipAsk(parsed.prompt ?? parsed.intro, 2000),
+    prompt: hasExit ? (rewritePublishWording(topPrompt) || 'The update is ready to save.') : topPrompt,
     recommendation: questions.find(question => question.id === 'image_edit_method' || question.id === 'object_removal_method')?.options.find(option => option.id === 'annotate')?.label ?? clipAsk(parsed.recommendation ?? parsed.hint, 400),
     questions: standaloneImageEditQuestions(questions),
   }

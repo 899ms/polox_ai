@@ -9,7 +9,6 @@ export const navMenu: NavMenu[] = [
         icon: 'i-lucide-home',
         link: '/',
       },
-
     ],
   },
   {
@@ -21,9 +20,9 @@ export const navMenu: NavMenu[] = [
         link: '/projects',
       },
       {
-        title: 'Asset Libraries',
-        icon: 'i-lucide-library',
-        link: '/libraries',
+        title: 'Skills',
+        icon: 'i-lucide-folder-kanban',
+        link: '/skills',
       },
     ],
   },

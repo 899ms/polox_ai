@@ -3,8 +3,11 @@ import { GripHorizontal, GripVertical } from 'lucide-vue-next'
 
 const props = withDefaults(defineProps<{
   storageKey?: string
+  /** When true, hide the right pane and expand left full-width (animated). */
+  collapsedRight?: boolean
 }>(), {
   storageKey: 'polox-studio-split',
+  collapsedRight: false,
 })
 
 const DEFAULT_WIDTH = 448
@@ -165,16 +168,21 @@ defineExpose({ maximizeAgent })
     }"
   >
     <div
-      class="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden bg-sidebar lg:w-[var(--studio-left-width)] lg:flex-none"
+      class="flex min-h-0 min-w-0 w-full flex-col overflow-hidden bg-sidebar transition-[width,flex-grow,flex-basis] duration-300 ease-out"
+      :class="collapsedRight
+        ? 'flex-1 lg:w-full lg:flex-1'
+        : 'flex-1 lg:w-[var(--studio-left-width)] lg:flex-none'"
     >
       <slot name="left" />
     </div>
 
     <div
-      class="group relative z-10 flex h-4 shrink-0 cursor-row-resize touch-none items-center justify-center lg:hidden"
+      class="group relative z-10 flex shrink-0 cursor-row-resize touch-none items-center justify-center transition-[height,opacity] duration-300 ease-out lg:hidden"
+      :class="collapsedRight ? 'pointer-events-none h-0 overflow-hidden opacity-0' : 'h-4 opacity-100'"
       role="separator"
       aria-orientation="horizontal"
       aria-label="Resize canvas panel"
+      :aria-hidden="collapsedRight"
       :aria-valuenow="bottomHeight"
       :aria-valuemin="0"
       :aria-valuemax="bottomMax"
@@ -193,10 +201,12 @@ defineExpose({ maximizeAgent })
     </div>
 
     <div
-      class="group relative z-10 hidden w-3 shrink-0 cursor-col-resize touch-none items-center justify-center lg:flex"
+      class="group relative z-10 hidden shrink-0 cursor-col-resize touch-none items-center justify-center transition-[width,opacity] duration-300 ease-out lg:flex"
+      :class="collapsedRight ? 'pointer-events-none w-0 overflow-hidden opacity-0' : 'w-3 opacity-100'"
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize generator panel"
+      :aria-hidden="collapsedRight"
       :aria-valuenow="leftWidth"
       :aria-valuemin="MIN_WIDTH"
       tabindex="0"
@@ -214,7 +224,11 @@ defineExpose({ maximizeAgent })
     </div>
 
     <div
-      class="relative isolate z-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-background max-lg:h-[var(--studio-bottom-height)] max-lg:shrink-0 lg:min-h-0 lg:flex-1"
+      class="relative isolate z-0 flex min-h-0 min-w-0 flex-col overflow-hidden bg-background transition-[flex-grow,opacity,max-width,height] duration-300 ease-out max-lg:shrink-0 lg:min-h-0"
+      :class="collapsedRight
+        ? 'pointer-events-none max-h-0 max-w-0 flex-none opacity-0 max-lg:h-0 lg:max-w-0'
+        : 'opacity-100 max-lg:h-[var(--studio-bottom-height)] lg:flex-1'"
+      :aria-hidden="collapsedRight"
     >
       <slot name="right" />
     </div>

@@ -11,7 +11,7 @@ export interface ServiceSettings {
   wavespeedOk: boolean
   checkedAt: string
 }
-export const DEFAULT_MODEL = 'moonshotai/kimi-k3'
+export const DEFAULT_MODEL = 'deepseek/deepseek-v4.1-flash'
 export function readServiceSettings(): ServiceSettings {
   const db = connectDatabase()
   db.exec('CREATE TABLE IF NOT EXISTS local_service_settings (id INTEGER PRIMARY KEY CHECK (id = 1), body TEXT NOT NULL)')

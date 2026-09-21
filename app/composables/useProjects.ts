@@ -9,9 +9,17 @@ export function useProjects() {
   const selectedProject = computed(() => projects.value.find(project => project.id === selectedProjectId.value)
     || projects.value[0]
     || null)
+
+  /** Studio/media projects only — skill workspaces live under Skills. */
+  const studioProjects = computed(() =>
+    projects.value.filter(project => project.kind !== 'skill'),
+  )
+
   async function createProject(input: {
     name?: string
     description?: string
+    kind?: 'studio' | 'skill'
+    skillId?: string
   } = {}) {
     const project = await $fetch<GenerationProjectPublic>('/api/projects', {
       method: 'POST',
@@ -21,6 +29,23 @@ export function useProjects() {
     selectedProjectId.value = project.id
     return project
   }
+
+  /** 1 skill ↔ 1 project. Creates or returns the bound skill workspace. */
+  async function ensureSkillProject(input: {
+    skillId?: string
+    name?: string
+    description?: string
+    projectId?: string
+  } = {}) {
+    const project = await $fetch<GenerationProjectPublic>('/api/projects/skill', {
+      method: 'POST',
+      body: input,
+    })
+    projects.value = [project, ...projects.value.filter(item => item.id !== project.id)]
+    selectedProjectId.value = project.id
+    return project
+  }
+
   async function loadProjects() {
     if (!import.meta.client) {
       return
@@ -33,7 +58,9 @@ export function useProjects() {
         const data = await $fetch<GenerationProjectList>('/api/projects')
         projects.value = data.items
         if (!projects.value.some(project => project.id === selectedProjectId.value)) {
-          selectedProjectId.value = projects.value.find(project => project.isDefault)?.id
+          const studio = projects.value.filter(project => project.kind !== 'skill')
+          selectedProjectId.value = studio.find(project => project.isDefault)?.id
+            || studio[0]?.id
             || projects.value[0]?.id
             || ''
         }
@@ -54,11 +81,13 @@ export function useProjects() {
   }
   return {
     projects,
+    studioProjects,
     selectedProjectId,
     selectedProject,
     loaded,
     loading,
     loadProjects,
     createProject,
+    ensureSkillProject,
   }
 }

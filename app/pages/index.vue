@@ -1,16 +1,62 @@
 <script setup lang="ts">
 import type { FrontierModelCard } from '@/constants/aiModels'
-import { AGENT_MODELS, publicAgentModels } from '~~/shared/utils/agentModels'
+import { publicAgentModels } from '~~/shared/utils/agentModels'
 import { PUBLIC_AGENT_SKILLS } from '~~/shared/utils/agentSkills'
 import HomeFrontierModels from '@/components/home/FrontierModels.vue'
 import HomeRecentProjects from '@/components/home/RecentProjects.vue'
 import HomeUsefulTools from '@/components/home/UsefulTools.vue'
 
+const COMPOSER_DRAFT_KEY = 'polox-agent-composer-draft'
+const EDIT_BRIEF_KEY = 'polox-edit-skill-brief'
+
 const { public: publicConfig } = useRuntimeConfig()
 const route = useRoute()
 const { selectHomeAgent } = useAgentWorkspaceNav()
+const { selectedProjectId } = useProjects()
+const { draft, ensureHydrated, sessionId } = useAgentLab({ projectId: selectedProjectId })
 
 const agentComposer = useTemplateRef('agentComposer')
+const pendingSkillCreatorEdit = ref(false)
+const sessionDraftReapplied = ref(false)
+
+function readStoredEditDraft() {
+  if (!import.meta.client)
+    return ''
+  try {
+    return String(sessionStorage.getItem(COMPOSER_DRAFT_KEY) || sessionStorage.getItem(EDIT_BRIEF_KEY) || '')
+  }
+  catch {
+    return ''
+  }
+}
+
+function clearStoredEditDraft() {
+  if (!import.meta.client)
+    return
+  try {
+    sessionStorage.removeItem(COMPOSER_DRAFT_KEY)
+    sessionStorage.removeItem(EDIT_BRIEF_KEY)
+  }
+  catch {
+    // Ignore private-mode / quota errors.
+  }
+}
+
+function applyStoredEditDraft() {
+  const text = readStoredEditDraft()
+  if (!text)
+    return false
+  draft.value = text
+  return true
+}
+
+function applyAndClearStoredEditDraft() {
+  if (!applyStoredEditDraft())
+    return false
+  clearStoredEditDraft()
+  pendingSkillCreatorEdit.value = false
+  return true
+}
 
 async function selectAgentModel(modelId: string) {
   selectHomeAgent()
@@ -24,6 +70,16 @@ async function selectAgentSkill(skillId: string) {
   await nextTick()
   await agentComposer.value?.mentionSkill(skillId)
   document.getElementById('generator')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+  if (skillId !== 'skill-creator')
+    return
+
+  // Edit flow: mentionSkill alone races with project hydrate (which clears draft).
+  // Prefer sessionStorage draft/brief set by My Skills → Edit.
+  pendingSkillCreatorEdit.value = Boolean(readStoredEditDraft())
+  sessionDraftReapplied.value = false
+  if (pendingSkillCreatorEdit.value)
+    applyStoredEditDraft()
 }
 
 onMounted(() => {
@@ -52,6 +108,26 @@ onMounted(() => {
     await navigateTo({ path: '/', query, hash: route.hash }, { replace: true })
     await selectAgentModel(modelId)
   }, { immediate: true })
+
+  // Project hydrate clears composer draft — re-apply edit brief after ensureHydrated.
+  watch(selectedProjectId, async () => {
+    if (!pendingSkillCreatorEdit.value && !readStoredEditDraft())
+      return
+    await ensureHydrated()
+    if (readStoredEditDraft())
+      applyAndClearStoredEditDraft()
+  })
+
+  // Once the agent session exists, re-apply once more if storage still has the draft.
+  watch(sessionId, (id) => {
+    if (!id || sessionDraftReapplied.value)
+      return
+    if (!pendingSkillCreatorEdit.value && !readStoredEditDraft())
+      return
+    sessionDraftReapplied.value = true
+    if (readStoredEditDraft())
+      applyAndClearStoredEditDraft()
+  })
 })
 
 function selectFrontierModel(card: FrontierModelCard) {

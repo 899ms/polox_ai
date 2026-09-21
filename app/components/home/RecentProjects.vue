@@ -3,9 +3,9 @@ import { ArrowRight } from 'lucide-vue-next'
 import ProjectCard from '@/components/projects/ProjectCard.vue'
 
 const MAX_RECENT_PROJECTS = 10
-const { projects, loaded, loadProjects } = useProjects()
+const { projects, studioProjects, loaded, loadProjects } = useProjects()
 const recentProjects = computed(() => {
-  return [...projects.value]
+  return [...studioProjects.value]
     .filter(project => project.assetCount > 0 || project.activeJobCount > 0)
     .sort((a, b) => {
       const byUpdated = Date.parse(b.updatedAt) - Date.parse(a.updatedAt)

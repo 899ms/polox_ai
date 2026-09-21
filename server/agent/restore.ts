@@ -1,3 +1,4 @@
+import { parseSkillSlashIds } from './skills'
 import type { AgentSession } from './session'
 import type { AgentImage, AgentImageKind, ChatMessage, VideoFamily } from './types'
 import { getAgentChat } from '../utils/agentChats'
@@ -165,7 +166,7 @@ function mergeImages(existing: AgentImage[], incoming: AgentImage[]) {
   }
   return [...map.values()].slice(0, MAX_IMAGES)
 }
-function applySnapshot(session: AgentSession, history: ChatMessage[], images: AgentImage[], replaceTranscript: boolean) {
+async function applySnapshot(session: AgentSession, history: ChatMessage[], images: AgentImage[], replaceTranscript: boolean) {
   if (images.length)
     session.images = mergeImages(session.images, images)
   if (replaceTranscript && history.length) {
@@ -173,7 +174,8 @@ function applySnapshot(session: AgentSession, history: ChatMessage[], images: Ag
       || { role: 'system' as const, content: '' }
     session.messages = [system, ...history]
   }
-  refreshSessionPrompt(session)
+  mergeLoadedSkillsFromTranscript(session)
+  await refreshSessionPrompt(session)
   touch(session)
 }
 async function fetchStoredChat(session: AgentSession) {
@@ -190,12 +192,26 @@ async function fetchStoredChat(session: AgentSession) {
     return null
   }
 }
+function mergeLoadedSkillsFromTranscript(session: AgentSession) {
+  const ids = new Set(session.loadedSkillIds || [])
+  for (const message of session.messages) {
+    if (message.role !== 'user')
+      continue
+    const text = flattenContent(message.content)
+    if (!text)
+      continue
+    for (const id of parseSkillSlashIds(text))
+      ids.add(id)
+  }
+  session.loadedSkillIds = [...ids]
+}
+
 export async function restoreSessionContext(session: AgentSession, history: unknown, images: unknown, currentText = '') {
   const restoredImages = parseClientImages(images)
   if (hasToolTranscript(session)) {
     if (restoredImages.length > session.images.length) {
       session.images = mergeImages(session.images, restoredImages)
-      refreshSessionPrompt(session)
+      await refreshSessionPrompt(session)
       touch(session)
     }
     return
@@ -216,5 +232,5 @@ export async function restoreSessionContext(session: AgentSession, history: unkn
     if (restoredHistory.length <= existingTurns && nextImages.length <= session.images.length)
       return
   }
-  applySnapshot(session, restoredHistory, nextImages, restoredHistory.length > existingTurns)
+  await applySnapshot(session, restoredHistory, nextImages, restoredHistory.length > existingTurns)
 }

@@ -41,13 +41,13 @@ test('green requires both successful tests and resets when settings change', () 
 test('one WaveSpeed key authenticates both LLM and account checks', async () => {
  const {db,settings:s}=harness()
  const saved=s.updateServiceSettings({wavespeedKey:'private-wave',llmModel:'provider/model'})
- assert.equal(saved.llmModel,'moonshotai/kimi-k3')
+ assert.equal(saved.llmModel,'deepseek/deepseek-v4.1-flash')
  const urls=[]
  const api=load('serviceConnection',{'./serviceSettings':s}, {fetch:async(url,init)=>{
   urls.push(url)
   assert.equal(init.headers.Authorization,'Bearer private-wave')
   if(url === 'https://llm.wavespeed.ai/v1/chat/completions') {
-   assert.equal(JSON.parse(init.body).model,'moonshotai/kimi-k3')
+   assert.equal(JSON.parse(init.body).model,'deepseek/deepseek-v4.1-flash')
    return {ok:true,status:200,json:async()=>({choices:[{message:{content:'OK'}}]})}
   }
   assert.equal(url,'https://api.wavespeed.ai/api/v3/balance')
@@ -154,17 +154,17 @@ test('an empty LLM answer must not pass the connection test', async () => {
  db.close()
 })
 
-test('DeepSeek V4 Flash sends text and refuses unsupported image input before a request', async () => {
+test('DeepSeek V4.1 Flash sends text and refuses unsupported image input before a request', async () => {
  let requests=0
  const api=load('../agent/llm', {
-  './env':{agentEnv:{wavespeedApiKey:'private-wave',model:'deepseek/deepseek-v4-flash'}},
+  './env':{agentEnv:{wavespeedApiKey:'private-wave',model:'deepseek/deepseek-v4.1-flash'}},
   '../utils/wavespeed':{uploadWavespeedFile:async()=> 'https://cdn.example.com/image.png'},
   '../utils/localMedia':{readStoredMedia:async()=>{throw new Error('must not read images')}},
  }, {fetch:async(url,init)=>{
   requests++
   assert.equal(url,'https://llm.wavespeed.ai/v1/chat/completions')
   const body=JSON.parse(init.body)
-  assert.equal(body.model,'deepseek/deepseek-v4-flash')
+  assert.equal(body.model,'deepseek/deepseek-v4.1-flash')
   assert.equal(body.messages[0].content,'Hello')
   return {ok:true,json:async()=>({choices:[{message:{content:'Hi'}}]})}
  }})

@@ -3,12 +3,12 @@ import { toast } from 'vue-sonner'
 import { readErrorMessage } from '~~/shared/utils/apiError'
 import { useSidebar } from '~/components/ui/sidebar'
 
-const { projects, loaded, loading, createProject } = useProjects()
+const { projects, studioProjects, loaded, loading, createProject } = useProjects()
 const { setOpenMobile } = useSidebar()
 const creating = ref(false)
 const route = useRoute()
 const MAX_RECENT_PROJECTS = 10
-const hasMoreProjects = computed(() => projects.value.length > MAX_RECENT_PROJECTS)
+const hasMoreProjects = computed(() => studioProjects.value.length > MAX_RECENT_PROJECTS)
 async function onCreateProject() {
   if (creating.value)
     return
@@ -26,7 +26,7 @@ async function onCreateProject() {
   }
 }
 const recentProjects = computed(() => {
-  return [...projects.value]
+  return [...studioProjects.value]
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)
       || Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, MAX_RECENT_PROJECTS)

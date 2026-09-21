@@ -130,7 +130,7 @@ export interface ResolvedGenerateVideo {
   uncertain_fields?: UncertainField[]
 }
 
-export type AgentImageKind = 'still' | 'cutout' | 'upload' | 'video'
+export type AgentImageKind = 'still' | 'cutout' | 'upload' | 'video' | 'audio'
 
 export interface AgentImage {
   modelId?: string
@@ -248,6 +248,7 @@ export type AgentEvent
     | { type: 'choice', choice: ChoicePayload }
     | { type: 'image', image: AgentImage, replay?: boolean }
     | { type: 'error', message: string, remaining?: number, required?: number }
+    | { type: 'navigate', path: string, reason?: string }
     | { type: 'done' }
 
 export type UserContentPart

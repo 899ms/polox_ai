@@ -1,6 +1,6 @@
 import type { AgentConfirmPolicy, AgentImage } from './types'
 import { assetName } from '~~/shared/utils/assetName'
-import { skillsPromptBlock } from './skills'
+import { skillsPromptBlock, type SkillsPromptOptions } from './skills'
 
 function confirmPolicyBlock(policy: AgentConfirmPolicy) {
   if (policy === 'auto') {
@@ -20,7 +20,7 @@ function confirmPolicyBlock(policy: AgentConfirmPolicy) {
 - Mark uncertain_fields to highlight what they may want to edit. Empty is fine when the brief is clear.`
 }
 
-export function systemPrompt(confirmPolicy: AgentConfirmPolicy = 'always') {
+export function systemPrompt(confirmPolicy: AgentConfirmPolicy = 'always', skillOptions: SkillsPromptOptions = {}) {
   return `You are PoloX Studio Agent.
 
 Preset capabilities:
@@ -56,7 +56,7 @@ Use the user's preferred language for every user-visible reply, card field, titl
 
 Give every generated image and video a short story/action title in the user's language using the name argument for preset tools and _name for registered model_* tools (for example Shot 6 · Hiding in the cave), including image edits, cutouts, and layer-splitter output titles. A bare shot number is insufficient: describe the event or purpose. Use actual storyboard numbers, including added scenes; never label different scenes with the same number. Keep matching still and video scene numbers consistent. Translate a legacy descriptive title before mentioning it; retain the real asset ID and URL. Preserve exact names or foreign-language quotations only when the user explicitly requests them or they are proper names or requested source text.
 
-Write image/video generation instructions in English, translating the user's intent while preserving its meaning. Keep quoted dialogue, narration, or lyrics in the user's chosen spoken language; English production instructions do not require English speech. A requested language for dialogue, narration, lyrics, or text inside the generated media applies to that content, not automatically to the surrounding chat. Keep tool names, parameter keys, IDs, and enum values in the required API format.${skillsPromptBlock()}`
+Write image/video generation instructions in English, translating the user's intent while preserving its meaning. Keep quoted dialogue, narration, or lyrics in the user's chosen spoken language; English production instructions do not require English speech. A requested language for dialogue, narration, lyrics, or text inside the generated media applies to that content, not automatically to the surrounding chat. Keep tool names, parameter keys, IDs, and enum values in the required API format.${skillsPromptBlock(skillOptions)}`
 }
 
 export const SYSTEM_PROMPT = systemPrompt('always')
@@ -64,11 +64,12 @@ export const SYSTEM_PROMPT = systemPrompt('always')
 export function sessionMediaPrompt(
   images: AgentImage[],
   confirmPolicy: AgentConfirmPolicy = 'always',
+  skillOptions: SkillsPromptOptions = {},
 ) {
   const stills = images.filter(item => item.status === 'success' && item.url && item.kind !== 'video').slice(0, 24)
   const videos = images.filter(item => item.status === 'success' && item.kind === 'video' && item.url).slice(0, 24)
   const failed = images.filter(item => item.status === 'fail').slice(0, 12)
-  const prompt = systemPrompt(confirmPolicy)
+  const prompt = systemPrompt(confirmPolicy, skillOptions)
   if (!stills.length && !videos.length && !failed.length)
     return prompt
 

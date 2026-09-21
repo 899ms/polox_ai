@@ -1,7 +1,7 @@
 import type { GenerationProjectPublic } from '../../shared/types/project'
 import type { IProject } from '../models/project'
 import { GENERATION_ACTIVE_STATES } from '../../shared/types/generation'
-import { DEFAULT_PROJECT_NAME, nextProjectTitle, PROJECT_DESCRIPTION_MAX, PROJECT_NAME_MAX } from '../../shared/types/project'
+import { DEFAULT_PROJECT_NAME, nextProjectTitle, nextSkillProjectTitle, PROJECT_DESCRIPTION_MAX, PROJECT_NAME_MAX, type ProjectKind } from '../../shared/types/project'
 import { AgentChat } from '../models/agentChat'
 import { AgentHistory } from '../models/agentHistory'
 import { GenerationJob } from '../models/generationJob'
@@ -33,6 +33,8 @@ export function toPublicProject(project: IProject & {
     name: project.name,
     description: project.description || '',
     isDefault: Boolean(project.isDefault),
+    kind: (project.kind === 'skill' ? 'skill' : 'studio') as ProjectKind,
+    skillId: project.kind === 'skill' ? String(project.skillId || '').trim() : '',
     jobCount: extras?.jobCount || 0,
     assetCount: extras?.assetCount || 0,
     activeJobCount: extras?.activeJobCount || 0,
@@ -91,6 +93,7 @@ export async function ensureDefaultProject() {
       name: DEFAULT_PROJECT_NAME,
       description: '',
       isDefault: true,
+      kind: 'studio',
     })
     scheduleBackfill(String(created._id))
     return created
@@ -164,14 +167,28 @@ export function sanitizeProjectFields(input: {
 export async function createProject(input: {
   name?: string
   description?: string
+  kind?: ProjectKind
+  skillId?: string
 }) {
   await ensureDefaultProject()
+  const kind: ProjectKind = input.kind === 'skill' ? 'skill' : 'studio'
+  const skillId = kind === 'skill' ? String(input.skillId || '').trim().toLowerCase() : ''
+  if (skillId) {
+    const bound = await Project.findOne({ kind: 'skill', skillId })
+    if (bound)
+      return bound
+  }
   const existing = await Project.find({}).select('name')
-  const fields = sanitizeProjectFields(input, existing.map(project => project.name))
+  const names = existing.map(project => project.name)
+  const fields = kind === 'skill'
+    ? { name: String(input.name || '').trim().slice(0, PROJECT_NAME_MAX) || nextSkillProjectTitle(names), description: String(input.description || '').trim().slice(0, PROJECT_DESCRIPTION_MAX) }
+    : sanitizeProjectFields(input, names)
   return Project.create({
     name: fields.name,
     description: fields.description,
     isDefault: false,
+    kind,
+    skillId: skillId || undefined,
   })
 }
 export async function updateProject(projectId: string, input: {
@@ -300,4 +317,110 @@ export async function projectStats(): Promise<ProjectStats> {
     }
   }
   return { countById, assetCountById, coverById, activeById }
+}
+
+
+/** After save_user_skill: bind this session project ↔ skill (1:1), renaming in place so chat history stays. */
+export async function bindSkillProject(skillId: string, projectId: string, skillName?: string) {
+  const id = String(skillId || '').trim().toLowerCase()
+  const pid = String(projectId || '').trim()
+  if (!id || !pid || !isProjectId(pid))
+    return null
+
+  const project = await Project.findOne({ _id: pid })
+  if (!project)
+    return null
+
+  if (project.kind !== 'skill') {
+    // Do not convert a studio project — create/bind a dedicated skill project instead.
+    return ensureSkillProject({ skillId: id, name: skillName || id })
+  }
+
+  const previousId = String(project.skillId || '').trim().toLowerCase()
+  const nextName = String(skillName || '').trim().slice(0, PROJECT_NAME_MAX)
+
+  // Rename / claim this workspace — never spawn a second project (that swaps chat history).
+  project.skillId = id
+  if (nextName)
+    project.name = nextName
+  await project.save()
+
+  // Drop the previous draft row when the id changed (untitled-* → final id).
+  if (previousId && previousId !== id) {
+    const { deleteUserSkill } = await import('./userSkills')
+    await deleteUserSkill(previousId)
+    // Detach any other skill project that still claimed the new id.
+    await Project.updateMany(
+      { kind: 'skill', skillId: id, _id: { $ne: project._id } },
+      { $set: { skillId: '' } },
+    )
+  }
+
+  const { UserSkill } = await import('../models/userSkill')
+  const row = await UserSkill.findOne({ skillId: id })
+  if (row) {
+    if (row.projectId !== pid)
+      row.projectId = pid
+    // Always refresh name on the skill row when provided (even if id unchanged).
+    if (nextName && row.name !== nextName)
+      row.name = nextName
+    row.updatedAt = new Date()
+    await row.save()
+  }
+  return project
+}
+
+export async function ensureSkillProject(input: { skillId?: string, name?: string, description?: string, projectId?: string } = {}) {
+  const skillId = String(input.skillId || '').trim().toLowerCase()
+  let project = null as Awaited<ReturnType<typeof Project.findOne>>
+
+  const projectId = String(input.projectId || '').trim()
+  if (projectId && isProjectId(projectId)) {
+    project = await Project.findOne({ _id: projectId, kind: 'skill' })
+  }
+
+  if (!project && skillId) {
+    const skillRow = await (await import('../models/userSkill')).UserSkill.findOne({ skillId })
+    const fromSkill = String(skillRow?.projectId || '').trim()
+    if (fromSkill && isProjectId(fromSkill)) {
+      const bound = await Project.findOne({ _id: fromSkill, kind: 'skill' })
+      if (bound) {
+        if (bound.skillId !== skillId) {
+          bound.skillId = skillId
+          await bound.save()
+        }
+        project = bound
+      }
+    }
+  }
+
+  if (!project && skillId) {
+    project = await Project.findOne({ kind: 'skill', skillId })
+  }
+
+  if (!project) {
+    project = await createProject({
+      kind: 'skill',
+      skillId: skillId || undefined,
+      name: input.name,
+      description: input.description || (skillId ? `Workspace for /${skillId}` : 'Skill Creator workspace'),
+    })
+  }
+
+  if (skillId) {
+    const { UserSkill } = await import('../models/userSkill')
+    const row = await UserSkill.findOne({ skillId })
+    if (row && row.projectId !== String(project._id)) {
+      row.projectId = String(project._id)
+      await row.save()
+    }
+    if (project.skillId !== skillId) {
+      project.skillId = skillId
+      if (input.name)
+        project.name = String(input.name).trim().slice(0, PROJECT_NAME_MAX) || project.name
+      await project.save()
+    }
+  }
+
+  return project
 }

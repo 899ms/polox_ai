@@ -792,7 +792,7 @@ onBeforeUnmount(() => {
           <button v-if="asset.url && asset.state === 'success'" class="canvas-action" aria-label="Export original file" :title="exporting ? 'Exporting…' : 'Export original file'" :disabled="exporting" @click="exportAssets([asset], 'file')">
             <Icon :name="exporting ? 'i-lucide-loader-circle' : 'i-lucide-download'" :class="{ 'animate-spin': exporting }" />
           </button>
-          <button v-if="showAttach && asset.url && !asset.video && asset.state === 'success'" class="canvas-action" aria-label="Use as reference" @click="emit('attach', { urls: [asset.url], prompt: asset.prompt })">
+          <button v-if="showAttach && asset.url && asset.state === 'success'" class="canvas-action" :aria-label="asset.video ? 'Use as video reference' : asset.audio ? 'Use as voice reference' : 'Use as reference'" :title="asset.video ? 'Use as video reference' : asset.audio ? 'Use as voice reference' : 'Use as reference'" @click="emit('attach', { urls: [asset.url], prompt: asset.prompt })">
             <Icon name="i-lucide-paperclip" />
           </button>
           <button v-if="showMove && asset.taskId" class="canvas-action" aria-label="Move to project" @click="emit('move', asset.taskId)">

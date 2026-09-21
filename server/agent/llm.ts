@@ -120,7 +120,7 @@ async function providerMessages(messages: ChatMessage[]) {
     const content = await Promise.all(message.content.map(async (part) => {
       if (part.type !== 'image_url')
         return part
-      if (agentEnv.model === 'deepseek/deepseek-v4-flash')
+      if (agentEnv.model === 'deepseek/deepseek-v4-flash' || agentEnv.model === 'deepseek/deepseek-v4.1-flash')
         throw new Error('DeepSeek V4 Flash does not support image input. Send a text-only message or choose a vision-capable model in Service connection.')
       const url = await providerImageUrl(part.image_url.url)
       return { ...part, image_url: { ...part.image_url, url } }

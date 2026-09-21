@@ -39,6 +39,8 @@ export interface AgentSession {
   bffUrl?: string
   quality: AgentQuality
   confirmPolicy: AgentConfirmPolicy
+  /** Skill ids whose full bodies are injected for this session (slash or load_skill). */
+  loadedSkillIds?: string[]
   updatedAt: number
 }
 const sessions = new Map<string, AgentSession>()
@@ -414,8 +416,19 @@ export function touch(session: AgentSession) {
   sessions.set(session.id, session)
   schedulePersist(session)
 }
-export function refreshSessionPrompt(session: AgentSession) {
-  const content = sessionMediaPrompt(session.images, session.confirmPolicy || 'always')
+export async function refreshSessionPrompt(session: AgentSession) {
+  let userCatalog: SkillsPromptOptions['userCatalog'] = []
+  try {
+    const { listEnabledUserCatalog } = await import('../utils/userSkills')
+    userCatalog = await listEnabledUserCatalog()
+  }
+  catch {
+    userCatalog = []
+  }
+  const content = sessionMediaPrompt(session.images, session.confirmPolicy || 'always', {
+    loadedSkillIds: session.loadedSkillIds || [],
+    userCatalog,
+  })
   if (session.messages[0]?.role === 'system')
     session.messages[0] = { role: 'system', content }
   else

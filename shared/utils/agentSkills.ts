@@ -74,11 +74,45 @@ export const PUBLIC_AGENT_SKILLS = [
     cover: '/brand/skills/long-form-video.webp',
     coverAlt: 'PoloX AI Long-form video skill cover — multi-shot film from a storyboard',
   },
+  {
+    id: 'skill-creator',
+    icon: 'lucide:wand-sparkles',
+    name: 'Create Skill',
+    description: 'Author an L1 skill that orchestrates existing tools — no custom code or UI cards.',
+    keywords: 'create skill builder custom workflow skill-creator 创建技能',
+    cover: '/brand/skills/skill-creator.svg',
+    coverAlt: 'PoloX AI Skill Creator — design a custom L1 orchestration skill',
+    placeholder: 'Describe the skill you want to create…',
+  },
 ] as const
 
-export function searchAgentSkills(query: string) {
+export const BUILTIN_PUBLIC_AGENT_SKILLS = PUBLIC_AGENT_SKILLS
+
+export type PublicAgentSkill = typeof PUBLIC_AGENT_SKILLS[number]
+
+export interface CatalogAgentSkill {
+  id: string
+  name: string
+  description: string
+  keywords?: string
+  icon?: string
+  cover?: string
+  coverAlt?: string
+  placeholder?: string
+  source?: 'builtin' | 'user' | 'imported'
+  enabled?: boolean
+}
+
+export function mergeAgentSkillCatalog(userSkills: CatalogAgentSkill[] = []): CatalogAgentSkill[] {
+  const builtin = PUBLIC_AGENT_SKILLS.map(skill => ({ ...skill, source: 'builtin' as const, enabled: true }))
+  const enabledUser = userSkills.filter(skill => skill.enabled !== false)
+  const builtinIds = new Set(builtin.map(skill => skill.id))
+  return [...builtin, ...enabledUser.filter(skill => !builtinIds.has(skill.id))]
+}
+
+export function searchAgentSkills(query: string, skills: readonly CatalogAgentSkill[] = PUBLIC_AGENT_SKILLS) {
   const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
-  return PUBLIC_AGENT_SKILLS.filter(skill => terms.every(term => `${skill.id} ${skill.name} ${skill.description} ${skill.keywords}`.toLowerCase().includes(term)))
+  return skills.filter(skill => terms.every(term => `${skill.id} ${skill.name} ${skill.description} ${skill.keywords || ''}`.toLowerCase().includes(term)))
 }
 
 export function findComposerCommand(text: string, caret: number) {
@@ -89,14 +123,17 @@ export function findComposerCommand(text: string, caret: number) {
   return match ? { start: caret - match[2]!.length - 1, end: caret, query: match[2]!, trigger: match[1] as '@' | '/' } : null
 }
 
-export function readSkillCommands(text: string) {
-  const ids = new Set([...text.matchAll(/(?:^|\s)\/([a-z0-9-]+)(?=\s|$)/g)].map(match => match[1]))
-  return PUBLIC_AGENT_SKILLS.filter(skill => ids.has(skill.id))
+export function readSkillCommands(text: string, skills: readonly CatalogAgentSkill[] = PUBLIC_AGENT_SKILLS) {
+  const ids = new Set([...text.matchAll(/(?:^|\s)\/([a-z][a-z0-9-]{0,63})(?=\s|$)/g)].map(match => match[1]!))
+  const list = Array.isArray(skills) ? skills : PUBLIC_AGENT_SKILLS
+  return list.filter(skill => ids.has(skill.id))
 }
 
-export function stripSkillCommands(text: string) {
-  return text.replace(/(?<!\S)\/([a-z0-9-]+)(?=\s|$)[ \t]*/g, (match, id) =>
-    PUBLIC_AGENT_SKILLS.some(skill => skill.id === id) ? '' : match)
+export function stripSkillCommands(text: string, skills: readonly CatalogAgentSkill[] = PUBLIC_AGENT_SKILLS) {
+  const list = Array.isArray(skills) ? skills : PUBLIC_AGENT_SKILLS
+  const ids = new Set(list.map(skill => skill.id))
+  return text.replace(/(?<!\S)\/([a-z][a-z0-9-]{0,63})(?=\s|$)[ \t]*/g, (match, id) =>
+    ids.has(id) ? '' : match)
 }
 
 export function composerPlaceholderForSkills(skills: readonly { id: string, placeholder?: string }[]) {

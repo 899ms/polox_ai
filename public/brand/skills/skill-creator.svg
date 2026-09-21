@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="540" viewBox="0 0 720 540">
+  <rect width="720" height="540" fill="#141414"/>
+  <rect x="60" y="60" width="600" height="420" rx="28" fill="#1f1f1f" stroke="#333" stroke-width="2"/>
+  <circle cx="360" cy="230" r="56" fill="#2a2a2a"/>
+  <path d="M360 198c-8 0-14 6-14 14v10c-16 4-28 18-28 36 0 20 16 36 36 36h12c20 0 36-16 36-36 0-18-12-32-28-36v-10c0-8-6-14-14-14zm0 84c-6 0-10-4-10-10s4-10 10-10 10 4 10 10-4 10-10 10z" fill="#a3a3a3"/>
+  <text x="360" y="340" text-anchor="middle" fill="#d4d4d4" font-family="system-ui,sans-serif" font-size="28" font-weight="600">Create Skill</text>
+  <text x="360" y="376" text-anchor="middle" fill="#737373" font-family="system-ui,sans-serif" font-size="16">Design a custom L1 workflow</text>
+</svg>

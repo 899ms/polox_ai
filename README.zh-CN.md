@@ -51,6 +51,19 @@ PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 [WaveSpeed]
 
 ## 更新
 
+### 2026 年 9 月 21 日 — v2.0.0
+
+1. **重要更新：Skill Creator（首个公开测试版）**  
+   可用 Skill Creator 创建自己的 **L1** skill。在首页 Agent 对话框输入 `/skill-creator` 即可开始（或从 **Skills → Create Skill** 进入）。  
+   L1 skill 只能编排 PoloX 已有的工具与 UI 卡片，不能自定义工具或自定义 UI。后续可能开放 **L2**（自定义工具 + UI）。
+
+   **请注意（测试版）：**
+   - 这是 Skill Creator 的**首个测试版本**。开发中已修掉不少问题，但肯定还有其他 bug。
+   - 目前仍是 **L1** 预览：部分内置工具还不完善，因此无法完美覆盖你想创建的每一种 skill。
+   - 遇到以上情况，欢迎 [提 Issue](https://github.com/saihhold-zhao/polox_ai/issues)，或发邮件到 [saihhold.chiu@gmail.com](mailto:saihhold.chiu@gmail.com)。
+
+2. **Harness 驱动 LLM** — Agent 默认模型改为 `deepseek/deepseek-v4.1-flash`。实测运行稳定，价格低于此前锁定的 Kimi K3。
+
 ### 2026 年 9 月 20 日 — v1.6.0
 
 1. **图像对象移除（Image Object Removal）** — 用框选或绿色遮罩标出对象并移除，其余画面尽量保持不变。
@@ -218,7 +231,7 @@ ffprobe -version
 3. 将 Key 填入输入框，点击 **Test connection**（连通测试）。
 4. 测试通过后，提示会变为绿色的 **Services connected**（服务已连接），即可开始创作。
 
-Agent LLM 已锁定为 `moonshotai/kimi-k3`，界面无需再选择模型。连通测试会发送一次简短的模型请求，可能产生少量 API 费用。
+Agent LLM 已锁定为 `deepseek/deepseek-v4.1-flash`，界面无需再选择模型。连通测试会发送一次简短的模型请求，可能产生少量 API 费用。
 
 本项目需要支持图像理解的 **视觉大模型**。在已测试过的模型里，Kimi 的表现相对更稳。若你有更合适或更具性价比的替代方案，欢迎在 [Issue](https://github.com/saihhold-zhao/polox_ai/issues) 提出建议。
 

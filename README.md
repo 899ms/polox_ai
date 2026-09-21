@@ -51,6 +51,19 @@ PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own [WaveSpeed](https:
 
 ## Updates
 
+### September 21, 2026 — v2.0.0
+
+1. **Major: Skill Creator (first public test)**  
+   Build your own **L1** skills with Skill Creator. On the homepage agent composer, type `/skill-creator` to start (or open **Skills → Create Skill**).  
+   L1 skills orchestrate PoloX’s existing tools and UI cards — they cannot define custom tools or custom UI. A later **L2** tier (custom tools + UI) may open up.
+
+   **Please note (test build):**
+   - This is the **first test release** of Skill Creator. Many bugs were found and fixed in development, but more will remain.
+   - Because this is still an **L1** preview, some built-in tools are incomplete, so not every skill idea can be built perfectly yet.
+   - If you hit either case, please [open an issue](https://github.com/saihhold-zhao/polox_ai/issues) or email [saihhold.chiu@gmail.com](mailto:saihhold.chiu@gmail.com).
+
+2. **Harness LLM** — agent driver model switched to `deepseek/deepseek-v4.1-flash`. In our testing it is stable and priced lower than the previous Kimi K3 lock.
+
 ### September 20, 2026 — v1.6.0
 
 1. **Image Object Removal** — mark objects with boxes or green masks and remove them while keeping the rest of the image.
@@ -218,7 +231,7 @@ Restart the development server after installing these tools.
 3. Paste the key and click **Test connection**.
 4. Once the test passes, the indicator turns green and reads **Services connected**. You are ready to create.
 
-The agent LLM is locked to `moonshotai/kimi-k3`; you do not need to choose a model in the dialog. Connection testing sends a short model request and may incur a small API charge.
+The agent LLM is locked to `deepseek/deepseek-v4.1-flash`; you do not need to choose a model in the dialog. Connection testing sends a short model request and may incur a small API charge.
 
 This project needs a **vision-capable** model for image understanding. Among the options tested so far, Kimi has been the most stable fit. If you know a stronger or more cost-effective alternative, please open an [Issue](https://github.com/saihhold-zhao/polox_ai/issues) with your suggestion.
 

@@ -14,7 +14,7 @@ const status = ref<ConnectionStatus | null>(null)
 const { dialogOpen: open } = useServiceConnection()
 const testing = ref(false)
 const MASKED_KEY = '********'
-const LOCKED_LLM_MODEL = 'moonshotai/kimi-k3'
+const LOCKED_LLM_MODEL = 'deepseek/deepseek-v4.1-flash'
 const wavespeedKey = ref('')
 function showSavedKeys() {
   wavespeedKey.value = status.value?.wavespeedConfigured ? MASKED_KEY : ''

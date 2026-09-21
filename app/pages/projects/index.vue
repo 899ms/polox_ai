@@ -9,12 +9,12 @@ import ProjectDeleteDialog from '@/components/projects/ProjectDeleteDialog.vue'
 const POLL_MS = 3000
 const { public: publicConfig } = useRuntimeConfig()
 
-const { projects, selectedProjectId, loaded, loadProjects } = useProjects()
+const { projects, studioProjects, selectedProjectId, loaded, loadProjects } = useProjects()
 useSeoMeta({
   title: `Projects · ${publicConfig.brandName}`,
   description: 'Your generation projects',
 })
-const hasActiveJobs = computed(() => projects.value.some(project => project.activeJobCount > 0))
+const hasActiveJobs = computed(() => studioProjects.value.some(project => project.activeJobCount > 0))
 const createOpen = ref(false)
 const creating = ref(false)
 const createName = ref('')
@@ -41,7 +41,7 @@ useIntervalFn(() => {
   void loadProjects()
 }, POLL_MS)
 function openCreate() {
-  createName.value = nextProjectTitle(projects.value.map(project => project.name))
+  createName.value = nextProjectTitle(studioProjects.value.map(project => project.name))
   createDescription.value = ''
   createOpen.value = true
 }
@@ -174,7 +174,7 @@ async function confirmDelete() {
       class="grid grid-cols-2 gap-3 lg:grid-cols-4"
     >
       <ProjectCard
-        v-for="project in projects"
+        v-for="project in studioProjects"
         :key="project.id"
         :project="project"
         :show-actions="!project.isDefault"
