@@ -41,7 +41,7 @@
   <img src="docs/images/polox-readme-update-image-text-editor.jpeg" alt="Case study — Image Text Editor numbered regions matched to text fields" width="100%" />
 </p>
 
-<p align="center"><em>These are just two examples — more capabilities are covered below, or ask Codex to help you try them hands-on.</em></p>
+<p align="center"><em>These are just two examples — more capabilities are covered below, or ask GrokBot or Codex to help you try them hands-on.</em></p>
 
 ## Introduction
 
@@ -146,17 +146,17 @@ PoloX runs locally with Nuxt, Vue, and SQLite. Bring your own [WaveSpeed](https:
 
 ## How to update
 
-Tell Codex:
+Tell GrokBot or Codex:
 
 ```text
 Pull the latest code from https://github.com/saihhold-zhao/polox_ai and install dependencies.
 ```
 
-⚠️ If you have already modified the local code, you may hit merge conflicts. Ask Codex to help resolve them.
+⚠️ If you have already modified the local code, you may hit merge conflicts. Ask GrokBot or Codex to help resolve them.
 
-## Install with Codex
+## Install with GrokBot or Codex
 
-Create a new task in Codex and send this prompt:
+Create a new task in GrokBot or Codex and send this prompt:
 
 ```text
 Help me install PoloX AI locally:
@@ -166,9 +166,9 @@ Help me install PoloX AI locally:
 4. Run pnpm i to install dependencies.
 ```
 
-## Run locally with Codex
+## Run locally with GrokBot or Codex
 
-Whenever you want to use PoloX, open the project in Codex and send:
+Whenever you want to use PoloX, open the project in GrokBot or Codex and send:
 
 ```text
 Run pnpm dev in this project and open the local page in the browser. Keep the server running while I use the app.
@@ -275,9 +275,9 @@ The [long-form video skill](server/agent/skills/long-form-video.md) defines this
 
 ## Troubleshooting and feedback
 
-If installation or usage goes wrong, ask Codex to inspect the error and help you resolve it. Share the relevant error message and what you were trying to do.
+If installation or usage goes wrong, ask GrokBot or Codex to inspect the error and help you resolve it. Share the relevant error message and what you were trying to do.
 
-If you find a bug or an improvement that would help other users, please [open an issue](https://github.com/saihhold-zhao/polox_ai/issues). Codex can help you draft and submit it. Include steps to reproduce, your operating system, and relevant logs; remove API keys and other private information before sharing.
+If you find a bug or an improvement that would help other users, please [open an issue](https://github.com/saihhold-zhao/polox_ai/issues). GrokBot or Codex can help you draft and submit it. Include steps to reproduce, your operating system, and relevant logs; remove API keys and other private information before sharing.
 
 ## Local data
 

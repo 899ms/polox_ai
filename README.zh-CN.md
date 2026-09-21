@@ -41,7 +41,7 @@
   <img src="docs/images/polox-readme-update-image-text-editor.jpeg" alt="案例 — Image Text Editor 画布序号与文本框对应" width="100%" />
 </p>
 
-<p align="center"><em>以上只是部分案例。更多功能见下方说明，也可直接问 Codex，欢迎动手体验。</em></p>
+<p align="center"><em>以上只是部分案例。更多功能见下方说明，也可直接问 GrokBot 或 Codex，欢迎动手体验。</em></p>
 
 ## 简介
 
@@ -146,17 +146,17 @@ PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 [WaveSpeed]
 
 ## 如何更新
 
-和 Codex 说：
+和 GrokBot 或 Codex 说：
 
 ```text
 拉取 https://github.com/saihhold-zhao/polox_ai 最新代码并安装依赖。
 ```
 
-⚠️ 若您已经修改了当前代码，可能产生代码冲突，可通过 Codex 进行解决。
+⚠️ 若您已经修改了当前代码，可能产生代码冲突，可通过 GrokBot 或 Codex 进行解决。
 
-## 使用 Codex 安装
+## 使用 GrokBot 或 Codex 安装
 
-在 Codex 中创建一个新任务，发送以下内容：
+在 GrokBot 或 Codex 中创建一个新任务，发送以下内容：
 
 ```text
 请帮我在本地安装 PoloX AI：
@@ -166,9 +166,9 @@ PoloX 基于 Nuxt、Vue 和 SQLite 在本地运行。使用自己的 [WaveSpeed]
 4. 执行 pnpm i 安装依赖。
 ```
 
-## 使用 Codex 本地运行
+## 使用 GrokBot 或 Codex 本地运行
 
-每次使用时，在 Codex 中打开本项目，发送：
+每次使用时，在 GrokBot 或 Codex 中打开本项目，发送：
 
 ```text
 请在本项目中执行 pnpm dev，并在浏览器中打开本地页面。使用期间请保持服务运行。
@@ -275,9 +275,9 @@ Agent LLM 已锁定为 `deepseek/deepseek-v4.1-flash`，界面无需再选择模
 
 ## 问题排查与反馈
 
-安装或使用过程中遇到问题，可以先让 Codex 检查报错并协助解决。提供相关错误信息，以及问题发生前的操作，有助于定位原因。
+安装或使用过程中遇到问题，可以先让 GrokBot 或 Codex 检查报错并协助解决。提供相关错误信息，以及问题发生前的操作，有助于定位原因。
 
-如果发现值得修复的问题，或有对其他用户也有帮助的建议，欢迎[提交 Issue](https://github.com/saihhold-zhao/polox_ai/issues)。不熟悉操作也没关系，可以让 Codex 帮你整理并提交。请附上复现步骤、操作系统和相关日志，并在分享前删除 API Key 等私密信息。
+如果发现值得修复的问题，或有对其他用户也有帮助的建议，欢迎[提交 Issue](https://github.com/saihhold-zhao/polox_ai/issues)。不熟悉操作也没关系，可以让 GrokBot 或 Codex 帮你整理并提交。请附上复现步骤、操作系统和相关日志，并在分享前删除 API Key 等私密信息。
 
 ## 本地数据
 

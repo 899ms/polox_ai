@@ -154,17 +154,17 @@ test('an empty LLM answer must not pass the connection test', async () => {
  db.close()
 })
 
-test('DeepSeek V4.1 Flash sends text and refuses unsupported image input before a request', async () => {
+test('DeepSeek V4 Flash sends text and refuses unsupported image input before a request', async () => {
  let requests=0
  const api=load('../agent/llm', {
-  './env':{agentEnv:{wavespeedApiKey:'private-wave',model:'deepseek/deepseek-v4.1-flash'}},
+  './env':{agentEnv:{wavespeedApiKey:'private-wave',model:'deepseek/deepseek-v4-flash'}},
   '../utils/wavespeed':{uploadWavespeedFile:async()=> 'https://cdn.example.com/image.png'},
   '../utils/localMedia':{readStoredMedia:async()=>{throw new Error('must not read images')}},
  }, {fetch:async(url,init)=>{
   requests++
   assert.equal(url,'https://llm.wavespeed.ai/v1/chat/completions')
   const body=JSON.parse(init.body)
-  assert.equal(body.model,'deepseek/deepseek-v4.1-flash')
+  assert.equal(body.model,'deepseek/deepseek-v4-flash')
   assert.equal(body.messages[0].content,'Hello')
   return {ok:true,json:async()=>({choices:[{message:{content:'Hi'}}]})}
  }})
